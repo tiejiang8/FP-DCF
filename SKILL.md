@@ -14,6 +14,7 @@ Use this skill when the task is to estimate intrinsic value from structured fund
 This repository is executable when installed as a skill because it includes a concrete CLI entrypoint:
 
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
+- Sensitivity heatmap runner: `{baseDir}/scripts/plot_sensitivity.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
 - Provider-backed sample input: `{baseDir}/examples/sample_input_yahoo.json`
@@ -43,6 +44,22 @@ If the runtime needs an isolated cache location, pass:
 
 ```bash
 python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --cache-dir /path/to/cache
+```
+
+If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, run:
+
+```bash
+python3 {baseDir}/scripts/plot_sensitivity.py --input /path/to/input.json --pretty
+```
+
+To render a chart artifact as well:
+
+```bash
+python3 {baseDir}/scripts/plot_sensitivity.py \
+  --input /path/to/input.json \
+  --output /path/to/heatmap.svg \
+  --json-output /path/to/heatmap.json \
+  --pretty
 ```
 
 ## Input Shape
@@ -139,6 +156,7 @@ Always return:
 - enterprise value, equity value, and per-share value when available
 - provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
+- if sensitivity analysis is requested, return both the structured sensitivity grid and the chart file path when one is rendered
 
 ## Execution Notes
 
@@ -147,6 +165,9 @@ Always return:
 - If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
 - Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
 - If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
+- If the user asks for a valuation sensitivity table or heatmap, prefer `{baseDir}/scripts/plot_sensitivity.py` over hand-rolling scenario loops.
+- If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
+- If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 
@@ -157,6 +178,7 @@ Read only what you need:
 - [references/methodology.md](./references/methodology.md) for the valuation methodology
 - [examples/sample_input.json](./examples/sample_input.json) for the intended input contract
 - [examples/sample_output.json](./examples/sample_output.json) for the intended output contract
+- [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json) for provider-backed ticker input
 
 ## Quality Bar
 

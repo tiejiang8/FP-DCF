@@ -69,3 +69,25 @@ class ValuationOutput:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class SensitivityHeatmapOutput:
+    ticker: str
+    market: str
+    valuation_model: str
+    metric: str
+    metric_label: str
+    currency: str | None = None
+    as_of_date: str | None = None
+    base_wacc: float | None = None
+    base_terminal_growth_rate: float | None = None
+    base_metric_value: float | None = None
+    wacc_values: list[float] = field(default_factory=list)
+    terminal_growth_values: list[float] = field(default_factory=list)
+    matrix: list[list[float | None]] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)

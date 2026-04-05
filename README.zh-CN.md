@@ -77,6 +77,7 @@
 - 面向 OpenClaw 的 [SKILL.md](./SKILL.md)
 - 基于 Yahoo Finance 的 provider-backed normalization
 - 默认开启的 provider snapshot 本地缓存
+- 可选的 `WACC x Terminal Growth` 敏感性热力图工作流
 - 单阶段 / 两阶段 DCF 引擎与结构化输出
 - 对应的测试与示例输入输出
 
@@ -99,6 +100,42 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 ```bash
 python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
 ```
+
+## 敏感性热力图
+
+`FP-DCF` 现在也支持 `WACC x Terminal Growth` 敏感性分析。它仍然优先输出结构化 JSON；如果安装了可选绘图依赖，还可以额外渲染 `svg/png` 图表。
+
+只生成结构化敏感性摘要：
+
+```bash
+python3 scripts/plot_sensitivity.py --input examples/sample_input.json --pretty
+```
+
+同时生成热力图和 JSON 摘要：
+
+```bash
+python3 scripts/plot_sensitivity.py \
+  --input examples/sample_input_yahoo.json \
+  --output /tmp/aapl_sensitivity.svg \
+  --json-output /tmp/aapl_sensitivity.json \
+  --pretty
+```
+
+如果已经安装成命令行工具，也可以直接运行：
+
+```bash
+fp-dcf-sensitivity --input examples/sample_input.json --pretty
+```
+
+默认设置为：
+
+- `metric=per_share_value`
+- WACC 轴：基准值上下各 `200 bps`
+- Terminal Growth 轴：基准值上下各 `100 bps`
+
+当 terminal growth 大于等于 WACC 时，对应单元格会留空，并在 `diagnostics` 中写明。
+
+如果因为缺少 `shares_out` 而无法生成 `per_share_value` 热力图，可以先加 `--refresh-provider`，或者把 metric 切换为 `equity_value` / `enterprise_value`。
 
 ## 缓存机制
 
@@ -177,6 +214,12 @@ FP-DCF/
 ```bash
 python3 -m pip install --upgrade pip
 pip install -e .[dev]
+```
+
+如果你需要渲染热力图文件，再安装可选绘图库依赖：
+
+```bash
+python3 -m pip install .[viz]
 ```
 
 运行测试：

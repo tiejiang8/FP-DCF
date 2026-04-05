@@ -71,6 +71,7 @@ This repository currently contains:
 - an agent-facing `SKILL.md` for OpenClaw-style runtimes
 - provider-backed normalization from Yahoo Finance
 - a default local cache for provider snapshots, plus a force-refresh path
+- an optional WACC x terminal growth sensitivity heatmap workflow
 - JSON examples and tests for downstream agent integration
 
 ## Planned Scope
@@ -103,6 +104,7 @@ FP-DCF/
 │   ├── sample_input_yahoo.json
 │   └── sample_output.json
 ├── scripts/
+│   ├── plot_sensitivity.py
 │   └── run_dcf.py
 ├── references/
 │   └── methodology.md
@@ -111,14 +113,19 @@ FP-DCF/
 │   ├── test_engine.py
 │   ├── test_normalize.py
 │   ├── test_schemas.py
+│   ├── test_sensitivity.py
+│   ├── test_sensitivity_cli.py
 │   └── test_yahoo_integration.py
 └── fp_dcf/
     ├── __init__.py
     ├── cli.py
     ├── engine.py
     ├── normalize.py
+    ├── plotting.py
     ├── providers/
     │   └── yahoo.py
+    ├── sensitivity.py
+    ├── sensitivity_cli.py
     └── schemas.py
 ```
 
@@ -189,6 +196,42 @@ You can also control normalization behavior from the JSON payload:
 
 For a live Yahoo-backed smoke run, install the runtime deps and execute the same command. The output is date-sensitive and will change as Yahoo data changes.
 
+## Sensitivity Heatmap
+
+FP-DCF also includes a dedicated sensitivity workflow for `WACC x Terminal Growth` visualization. The computation path remains JSON-first and can optionally render a chart artifact when the `viz` extras are installed.
+
+Generate a structured sensitivity summary:
+
+```bash
+python3 scripts/plot_sensitivity.py --input examples/sample_input.json --pretty
+```
+
+Render an SVG heatmap plus a JSON summary:
+
+```bash
+python3 scripts/plot_sensitivity.py \
+  --input examples/sample_input_yahoo.json \
+  --output /tmp/aapl_sensitivity.svg \
+  --json-output /tmp/aapl_sensitivity.json \
+  --pretty
+```
+
+Use the packaged CLI after installing the project:
+
+```bash
+fp-dcf-sensitivity --input examples/sample_input.json --pretty
+```
+
+The heatmap defaults to:
+
+- `metric=per_share_value`
+- WACC range: base case `+/- 200 bps`
+- terminal growth range: base case `+/- 100 bps`
+
+Invalid cells where terminal growth is greater than or equal to WACC are left blank and reported in the diagnostics.
+
+If `per_share_value` is unavailable because `shares_out` is missing, rerun with `--refresh-provider` or switch the heatmap metric to `equity_value` / `enterprise_value`.
+
 ## Structured Output Direction
 
 The public contract is meant to be machine-readable first. A typical response shape looks like:
@@ -245,6 +288,12 @@ Current base dependencies:
 - `numpy`
 - `pandas`
 - `yfinance`
+
+For optional chart rendering:
+
+```bash
+python3 -m pip install .[viz]
+```
 
 For local development and tests:
 

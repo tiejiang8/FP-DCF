@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 
-_PROVIDER_CACHE_VERSION = 1
+_PROVIDER_CACHE_VERSION = 2
 
 
 def _has_core_inputs(payload: dict) -> bool:
