@@ -1,20 +1,63 @@
 ---
-name: "fp-dcf"
-description: "Use when the user needs a first-principles DCF valuation, wants to audit FCFF/WACC assumptions, or needs structured valuation output for LLM or MCP workflows. Prioritize tax-rate separation, robust working-capital handling, and auditable diagnostics."
+name: "fp_dcf"
+description: "Run a first-principles DCF valuation from structured JSON input and emit auditable FCFF, WACC, and intrinsic value output."
+metadata: {"openclaw":{"emoji":"📉","homepage":"https://github.com/tiejiang8/FP-DCF","requires":{"anyBins":["python3","python"]}}}
+user-invocable: true
 ---
 
 # FP-DCF
 
-Use this skill when the task is to estimate intrinsic value from public financial statements and market data using a disciplined, auditable DCF workflow.
+Use this skill when the task is to estimate intrinsic value from structured fundamentals and assumption inputs using a disciplined, auditable DCF workflow.
 
-## Quick Start
+## Runtime Contract
 
-1. Gather ticker, market, statement frequency, and the target valuation mode.
-2. Normalize the statement inputs into a consistent schema.
-3. Build `FCFF` with explicit tax and working-capital logic.
-4. Build `WACC` with explicit market assumptions and capital weights.
-5. Run the selected DCF model.
-6. Return the valuation together with source-aware diagnostics.
+This repository is executable when installed as a skill because it includes a concrete CLI entrypoint:
+
+- Primary runner: `{baseDir}/scripts/run_dcf.py`
+- Python module entrypoint: `python3 -m fp_dcf.cli`
+- Sample input: `{baseDir}/examples/sample_input.json`
+
+Preferred execution pattern:
+
+1. Build a JSON payload that matches `{baseDir}/examples/sample_input.json`.
+2. Write that payload to a temporary JSON file in the workspace.
+3. Run one of:
+   - `python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty`
+   - `python {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty`
+4. Read the JSON output and present the result to the user.
+
+If the runtime supports stdin piping, this also works:
+
+```bash
+python3 {baseDir}/scripts/run_dcf.py --pretty < /path/to/input.json
+```
+
+## Input Shape
+
+The expected JSON object contains:
+
+- `ticker`
+- `market`
+- `valuation_model`
+- `assumptions`
+- `fundamentals`
+
+Minimum required values for a useful result:
+
+- `assumptions.effective_tax_rate`
+- `assumptions.marginal_tax_rate`
+- `assumptions.risk_free_rate`
+- `assumptions.equity_risk_premium`
+- `assumptions.beta`
+- `assumptions.pre_tax_cost_of_debt`
+- `fundamentals.fcff_anchor` or `fundamentals.ebit`
+
+If `fundamentals.fcff_anchor` is not supplied, the runner computes it from:
+
+- `ebit`
+- `da`
+- `capex`
+- `delta_nwc` or a fallback working-capital field
 
 ## Core Rules
 
@@ -23,16 +66,16 @@ Use this skill when the task is to estimate intrinsic value from public financia
 - Keep the operating tax estimate for `FCFF` separate from the marginal tax assumption used in `WACC`.
 - If the statement-level tax rate is available, prefer it for `EBIAT/NOPAT`.
 - If the marginal tax rate is manual or market-defaulted, expose that source in the output.
-- Do not silently reuse one tax rate for both paths when the intended sources differ.
+- Do not silently reuse one tax rate for both paths when the intended sources differ. If a fallback reuse happens, surface it in `warnings`.
 
 ### Working-Capital Policy
 
 Use this fallback order and report which path was used:
 
-1. `OpNWC_delta`
-2. `NWC_delta`
-3. Derived operating working capital from current assets/current liabilities
-4. Cash-flow working-capital change fields such as `ChangeInWorkingCapital`
+1. `delta_nwc`
+2. `op_nwc_delta`
+3. `nwc_delta`
+4. cash-flow working-capital change fields such as `change_in_working_capital`
 
 If all paths fail, flag the result as degraded rather than pretending the estimate is fully reliable.
 
@@ -46,7 +89,7 @@ If all paths fail, flag the result as degraded rather than pretending the estima
 ### WACC Policy
 
 - Use explicit sources for risk-free rate, ERP, beta, pre-tax debt cost, and capital weights.
-- Prefer market-value capital structure when price and shares-outstanding data are available.
+- Prefer explicit capital weights from the input payload when available.
 - Apply the marginal tax assumption only to the debt tax shield.
 - Attach a warning when key inputs are manual, defaulted, stale, or missing.
 
@@ -66,6 +109,13 @@ Always return:
 - `WACC` inputs and capital weights
 - enterprise value, equity value, and per-share value when available
 - diagnostics, warnings, and degradation flags
+
+## Execution Notes
+
+- Use `{baseDir}` instead of guessing the install path.
+- Prefer writing a JSON file and passing `--input` over hand-building one-line shell JSON.
+- If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
+- Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 
 ## Reference Map
 

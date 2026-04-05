@@ -1,39 +1,51 @@
 {
   "ticker": "AAPL",
   "market": "US",
+  "valuation_model": "steady_state_single_stage",
   "currency": "USD",
   "as_of_date": "2026-04-05",
-  "valuation_model": "steady_state_single_stage",
-  "assumptions": {
+  "tax": {
     "effective_tax_rate": 0.187,
-    "effective_tax_rate_source": "statement",
+    "effective_tax_rate_source": "manual_input",
     "marginal_tax_rate": 0.21,
-    "marginal_tax_rate_source": "manual_or_market_default",
+    "marginal_tax_rate_source": "manual_input"
+  },
+  "wacc_inputs": {
     "risk_free_rate": 0.043,
+    "risk_free_rate_source": "manual_input",
     "equity_risk_premium": 0.05,
+    "equity_risk_premium_source": "manual_input",
     "beta": 1.08,
+    "beta_source": "manual_input",
     "cost_of_equity": 0.097,
     "pre_tax_cost_of_debt": 0.032,
-    "capital_structure": {
-      "equity_weight": 0.92,
-      "debt_weight": 0.08
-    }
+    "pre_tax_cost_of_debt_source": "manual_input",
+    "wacc": 0.0912624
+  },
+  "capital_structure": {
+    "equity_weight": 0.92,
+    "debt_weight": 0.08,
+    "source": "manual_input"
   },
   "fcff": {
-    "anchor": 104200000000.0,
-    "anchor_method": "nopat_roic_reinvestment",
+    "anchor": 106216000000.0,
+    "anchor_method": "ebiat_plus_da_minus_capex_minus_delta_nwc",
     "delta_nwc_source": "OpNWC_delta",
     "last_report_period": "2025-09-27"
   },
   "valuation": {
-    "enterprise_value": 1825000000000.0,
-    "equity_value": 1779000000000.0,
-    "per_share_value": 114.2
+    "enterprise_value": 1785801405103.2935,
+    "equity_value": 1739801405103.2935,
+    "per_share_value": 112.24525194214796,
+    "terminal_growth_rate": 0.03,
+    "terminal_growth_rate_effective": 0.03,
+    "present_value_stage1": 0.0,
+    "present_value_terminal": 1785801405103.2935,
+    "terminal_value_share": 1.0
   },
   "diagnostics": [
-    "fcff_uses_statement_effective_tax_rate",
-    "wacc_uses_marginal_tax_rate",
-    "terminal_value_share_below_threshold"
+    "tax_rate_paths_are_separated",
+    "valuation_model_steady_state_single_stage"
   ],
   "warnings": []
 }

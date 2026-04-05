@@ -99,10 +99,14 @@ FP-DCF/
 ├── examples/
 │   ├── sample_input.json
 │   └── sample_output.json
+├── scripts/
+│   └── run_dcf.py
 ├── references/
 │   └── methodology.md
 └── fp_dcf/
     ├── __init__.py
+    ├── cli.py
+    ├── engine.py
     └── schemas.py
 ```
 
@@ -118,6 +122,22 @@ The intended agent workflow is:
 
 The agent guidance for that workflow lives in [SKILL.md](./SKILL.md).
 
+## Executable Entry Points
+
+This repository now includes a runnable valuation path:
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
+```
+
+You can also use the packaged CLI after installation:
+
+```bash
+fp-dcf --input examples/sample_input.json --pretty
+```
+
+The runner expects structured JSON input and emits structured JSON output suitable for OpenClaw-style skill execution.
+
 ## Structured Output Direction
 
 The public contract is meant to be machine-readable first. A typical response shape looks like:
@@ -127,27 +147,34 @@ The public contract is meant to be machine-readable first. A typical response sh
   "ticker": "AAPL",
   "market": "US",
   "valuation_model": "steady_state_single_stage",
-  "assumptions": {
+  "tax": {
     "effective_tax_rate": 0.187,
-    "marginal_tax_rate": 0.21,
+    "marginal_tax_rate": 0.21
+  },
+  "wacc_inputs": {
     "risk_free_rate": 0.043,
     "equity_risk_premium": 0.05,
     "beta": 1.08,
-    "pre_tax_cost_of_debt": 0.032
+    "pre_tax_cost_of_debt": 0.032,
+    "wacc": 0.0912624
+  },
+  "capital_structure": {
+    "equity_weight": 0.92,
+    "debt_weight": 0.08
   },
   "fcff": {
-    "anchor": 104200000000.0,
-    "anchor_method": "nopat_roic_reinvestment",
+    "anchor": 106216000000.0,
+    "anchor_method": "ebiat_plus_da_minus_capex_minus_delta_nwc",
     "delta_nwc_source": "OpNWC_delta"
   },
   "valuation": {
-    "enterprise_value": 1825000000000.0,
-    "equity_value": 1779000000000.0,
-    "per_share_value": 114.2
+    "enterprise_value": 1785801405103.2935,
+    "equity_value": 1739801405103.2935,
+    "per_share_value": 112.24525194214796
   },
   "diagnostics": [
-    "wacc_uses_marginal_tax_rate",
-    "fcff_uses_statement_effective_tax_rate"
+    "tax_rate_paths_are_separated",
+    "valuation_model_steady_state_single_stage"
   ]
 }
 ```
@@ -170,8 +197,8 @@ Current base dependencies:
 
 1. Extract the core `FCFF` logic into this package.
 2. Extract the `WACC` and market-data utilities.
-3. Add a stable Python API and CLI entrypoint.
-4. Add tests for tax isolation and delta-NWC fallback selection.
+3. Add provider-backed normalization from public market data.
+4. Expand tests for tax isolation and delta-NWC fallback selection.
 5. Add provider adapters and explicit financial-sector downgrade rules.
 
 ## Contributing
