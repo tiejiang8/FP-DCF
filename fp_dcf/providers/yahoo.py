@@ -451,7 +451,50 @@ def _merge_missing(target: dict, updates: dict) -> None:
             target[key] = value
 
 
-def enrich_payload_from_yahoo(payload: dict) -> dict:
+def fetch_yahoo_snapshot(
+    ticker_symbol: str,
+    *,
+    market: str = "US",
+    statement_frequency: str = "A",
+) -> dict:
+    _require_deps()
+    if not ticker_symbol:
+        raise ValueError("ticker is required for yahoo normalization")
+
+    statement_frequency = str(statement_frequency or "A").upper()
+    yf_symbol = _normalize_symbol(ticker_symbol, market)
+    ticker = yf.Ticker(yf_symbol)
+    normalized = _extract_latest_snapshot(ticker, statement_frequency, market)
+
+    risk_free_rate, risk_free_source = _fetch_riskfree_rate(market)
+    benchmark = _benchmark_ticker(market)
+    beta = _compute_beta(yf_symbol, benchmark)
+
+    assumptions = deepcopy(normalized.get("assumptions", {}))
+    if risk_free_rate is not None:
+        assumptions["risk_free_rate"] = risk_free_rate
+        assumptions["risk_free_rate_source"] = risk_free_source
+    if assumptions.get("equity_risk_premium") in (None, ""):
+        assumptions["equity_risk_premium"] = _default_equity_risk_premium(market)
+        assumptions["equity_risk_premium_source"] = "market_default"
+    if beta is not None:
+        assumptions["beta"] = beta
+        assumptions["beta_source"] = f"yahoo_price_regression:{benchmark}"
+    if assumptions.get("marginal_tax_rate") in (None, ""):
+        assumptions["marginal_tax_rate"] = _default_marginal_tax_rate(market)
+        assumptions["marginal_tax_rate_source"] = "market_default"
+
+    return {
+        "provider": "yahoo",
+        "normalized_symbol": yf_symbol,
+        "statement_frequency": statement_frequency,
+        "currency": normalized.get("currency"),
+        "fundamentals": deepcopy(normalized.get("fundamentals", {})),
+        "assumptions": assumptions,
+    }
+
+
+def enrich_payload_from_yahoo(payload: dict, *, snapshot: dict | None = None) -> dict:
     _require_deps()
     out = deepcopy(payload)
     assumptions = out.setdefault("assumptions", {})
@@ -465,38 +508,23 @@ def enrich_payload_from_yahoo(payload: dict) -> dict:
         raise ValueError("ticker is required for yahoo normalization")
 
     statement_frequency = str(out.get("statement_frequency") or "A").upper()
-    yf_symbol = _normalize_symbol(ticker_symbol, market)
-    ticker = yf.Ticker(yf_symbol)
-    normalized = _extract_latest_snapshot(ticker, statement_frequency, market)
+    provider_snapshot = snapshot or fetch_yahoo_snapshot(
+        ticker_symbol,
+        market=market,
+        statement_frequency=statement_frequency,
+    )
 
-    risk_free_rate, risk_free_source = _fetch_riskfree_rate(market)
-    beta = _compute_beta(yf_symbol, _benchmark_ticker(market))
+    _merge_missing(fundamentals, provider_snapshot.get("fundamentals", {}))
+    _merge_missing(assumptions, provider_snapshot.get("assumptions", {}))
 
-    _merge_missing(fundamentals, normalized.get("fundamentals", {}))
-    _merge_missing(assumptions, normalized.get("assumptions", {}))
+    if out.get("currency") in (None, "") and provider_snapshot.get("currency"):
+        out["currency"] = provider_snapshot["currency"]
 
-    if out.get("currency") in (None, "") and normalized.get("currency"):
-        out["currency"] = normalized["currency"]
-
-    if assumptions.get("risk_free_rate") in (None, "") and risk_free_rate is not None:
-        assumptions["risk_free_rate"] = risk_free_rate
-        assumptions["risk_free_rate_source"] = risk_free_source
-    elif assumptions.get("risk_free_rate") in (None, ""):
+    if assumptions.get("risk_free_rate") in (None, ""):
         prefill_warnings.append("yahoo_risk_free_rate_unavailable_engine_default_will_apply")
 
-    if assumptions.get("equity_risk_premium") in (None, ""):
-        assumptions["equity_risk_premium"] = _default_equity_risk_premium(market)
-        assumptions["equity_risk_premium_source"] = "market_default"
-
-    if assumptions.get("beta") in (None, "") and beta is not None:
-        assumptions["beta"] = beta
-        assumptions["beta_source"] = f"yahoo_price_regression:{_benchmark_ticker(market)}"
-    elif assumptions.get("beta") in (None, ""):
+    if assumptions.get("beta") in (None, ""):
         prefill_warnings.append("yahoo_beta_unavailable_engine_default_will_apply")
-
-    if assumptions.get("marginal_tax_rate") in (None, ""):
-        assumptions["marginal_tax_rate"] = _default_marginal_tax_rate(market)
-        assumptions["marginal_tax_rate_source"] = "market_default"
 
     if assumptions.get("pre_tax_cost_of_debt") in (None, ""):
         prefill_warnings.append("yahoo_cost_of_debt_unavailable_engine_default_may_apply")
@@ -505,5 +533,5 @@ def enrich_payload_from_yahoo(payload: dict) -> dict:
     out["_prefill_warnings"] = prefill_warnings
     out["_prefill_diagnostics"] = prefill_diagnostics
     out["provider"] = "yahoo"
-    out["normalized_symbol"] = yf_symbol
+    out["normalized_symbol"] = provider_snapshot.get("normalized_symbol") or _normalize_symbol(ticker_symbol, market)
     return out

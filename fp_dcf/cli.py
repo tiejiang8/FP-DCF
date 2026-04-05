@@ -30,6 +30,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optionally enrich missing inputs using a provider before valuation.",
     )
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        help="Override the provider cache directory. Defaults to the local user cache path.",
+    )
+    parser.add_argument(
+        "--refresh-provider",
+        action="store_true",
+        help="Force a fresh provider fetch and overwrite the cached snapshot for this request.",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the output JSON.")
     return parser
 
@@ -40,7 +50,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = _load_payload(args.input)
-        payload = normalize_payload(payload, provider_override=args.provider)
+        payload = normalize_payload(
+            payload,
+            provider_override=args.provider,
+            cache_dir=args.cache_dir,
+            force_refresh=args.refresh_provider,
+        )
         result = run_valuation(payload).to_dict()
         text = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False)
         if args.output == "-":

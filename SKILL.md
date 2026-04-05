@@ -33,6 +33,18 @@ If the runtime supports stdin piping, this also works:
 python3 {baseDir}/scripts/run_dcf.py --pretty < /path/to/input.json
 ```
 
+Yahoo-backed normalization uses a local provider cache by default. To force a fresh pull from Yahoo for the current request, run:
+
+```bash
+python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --refresh-provider
+```
+
+If the runtime needs an isolated cache location, pass:
+
+```bash
+python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --cache-dir /path/to/cache
+```
+
 ## Input Shape
 
 The expected JSON object contains:
@@ -66,6 +78,12 @@ If those structured fields are mostly missing, the runner can auto-normalize the
 - the payload has a `ticker` but is missing core DCF inputs
 
 The minimal provider-backed input shape is shown in [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json).
+
+The payload can also drive normalization behavior through an optional `normalization` object:
+
+- `normalization.provider`
+- `normalization.refresh`
+- `normalization.cache_dir`
 
 Live Yahoo-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
 
@@ -125,6 +143,8 @@ Always return:
 - Use `{baseDir}` instead of guessing the install path.
 - Prefer writing a JSON file and passing `--input` over hand-building one-line shell JSON.
 - If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
+- Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
+- If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 

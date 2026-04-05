@@ -65,12 +65,11 @@ The intended `WACC` path is:
 
 This repository currently contains:
 
-- a GitHub-ready README and project positioning
-- an agent-facing `SKILL.md`
-- a lightweight Python package scaffold for typed I/O contracts
-- JSON examples for downstream OpenAI / MCP / custom-agent integration
-
-Implementation extraction is the next step. The reference baseline is the local `dcf_mvp_yahoo` workflow, but this repository is being narrowed into a cleaner public skill/package boundary.
+- an executable CLI and script entrypoint for structured DCF runs
+- an agent-facing `SKILL.md` for OpenClaw-style runtimes
+- provider-backed normalization from Yahoo Finance
+- a default local cache for provider snapshots, plus a force-refresh path
+- JSON examples and tests for downstream agent integration
 
 ## Planned Scope
 
@@ -142,6 +141,24 @@ If you only have a ticker and want the runner to fill missing valuation inputs f
 
 ```bash
 python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
+```
+
+Yahoo-backed normalization uses a local cache by default so repeated runs do not re-fetch the same provider snapshot every time. The default cache path is:
+
+```bash
+~/.cache/fp-dcf
+```
+
+To force a fresh Yahoo pull and overwrite the cached snapshot for that ticker/request shape:
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --refresh-provider
+```
+
+To override the cache directory:
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --cache-dir /tmp/fp-dcf-cache
 ```
 
 For a live Yahoo-backed smoke run, install the runtime deps and execute the same command. The output is date-sensitive and will change as Yahoo data changes.
@@ -216,9 +233,9 @@ FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
 
 ## Near-Term Roadmap
 
-1. Extract the core `FCFF` logic into this package.
-2. Extract the `WACC` and market-data utilities.
-3. Add provider-backed normalization from public market data.
+1. Harden the Yahoo normalization path around edge-case statement coverage and stale fields.
+2. Add more valuation-model tests around cash-flow fallback behavior and warning propagation.
+3. Add cache freshness policy and optional TTL controls for provider snapshots.
 4. Expand tests for tax isolation and delta-NWC fallback selection.
 5. Add provider adapters and explicit financial-sector downgrade rules.
 
