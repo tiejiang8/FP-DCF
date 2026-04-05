@@ -16,6 +16,7 @@ This repository is executable when installed as a skill because it includes a co
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
+- Base Python dependencies for the default one-click path: `numpy`, `pandas`, `yfinance`, `matplotlib`
 
 Preferred execution pattern:
 
@@ -190,7 +191,8 @@ Always return:
 - If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with its default sensitivity output and auto-generated chart path over a separate second command.
 - If the caller needs the full numeric heatmap grid in JSON, set `sensitivity.detail=true` instead of bloating the default output for every run.
 - Only use `--sensitivity-chart-output` or `sensitivity.chart_path` when the caller explicitly wants to override the default artifact location.
-- If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
+- The default one-click path assumes `matplotlib` is installed, because PNG/SVG chart artifacts are rendered automatically.
+- If the environment intentionally excludes `matplotlib`, disable sensitivity first with `--no-sensitivity` or `sensitivity.enabled=false` before running the main CLI.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.

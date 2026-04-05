@@ -71,7 +71,7 @@ This repository currently contains:
 - an agent-facing `SKILL.md` for OpenClaw-style runtimes
 - provider-backed normalization from Yahoo Finance
 - a default local cache for provider snapshots, plus a force-refresh path
-- a default WACC x terminal growth sensitivity block with an auto-rendered chart artifact
+- a default WACC x terminal growth sensitivity block with auto-rendered PNG/SVG chart artifacts
 - JSON examples and tests for downstream agent integration
 
 ## Planned Scope
@@ -353,8 +353,11 @@ Current base dependencies:
 - `numpy`
 - `pandas`
 - `yfinance`
+- `matplotlib`
 
-For optional chart rendering:
+`matplotlib` is a base dependency because the main CLI renders `png/svg` sensitivity charts by default.
+
+The legacy `.[viz]` extra still works as a backward-compatible alias:
 
 ```bash
 python3 -m pip install .[viz]

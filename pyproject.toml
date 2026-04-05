@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.26",
   "pandas>=2.2",
   "yfinance>=0.2.54",
+  "matplotlib>=3.8",
 ]
 keywords = ["dcf", "valuation", "finance", "llm", "mcp", "yfinance"]
 
@@ -20,6 +21,8 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.4",
 ]
+# Backward-compatible alias. The default runtime now includes matplotlib
+# because the main CLI renders PNG/SVG sensitivity charts by default.
 viz = [
   "matplotlib>=3.8",
 ]

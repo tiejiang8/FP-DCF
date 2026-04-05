@@ -282,7 +282,16 @@ python3 -m pip install --upgrade pip
 pip install -e .[dev]
 ```
 
-如果你需要渲染热力图文件，再安装可选绘图库依赖：
+当前基础运行时依赖包括：
+
+- `numpy`
+- `pandas`
+- `yfinance`
+- `matplotlib`
+
+之所以把 `matplotlib` 放到基础依赖里，是因为主 CLI 默认会同时渲染 `png/svg` 敏感性图表。
+
+旧的 `.[viz]` 安装方式仍然可以继续使用，作为兼容别名：
 
 ```bash
 python3 -m pip install .[viz]
