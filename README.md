@@ -233,7 +233,7 @@ The resulting `output.json` includes:
 - the core valuation result
 - a compact `sensitivity` object with the base case and axis summary
 - an `artifacts.sensitivity_heatmap_path` entry pointing to the PNG chart
-- `artifacts.sensitivity_heatmap_png_path` and `artifacts.sensitivity_heatmap_svg_path`
+- an `artifacts.sensitivity_heatmap_svg_path` entry pointing to the SVG chart
 
 If you want to override the default chart path, you can still do that from the CLI:
 

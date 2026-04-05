@@ -139,7 +139,7 @@ python3 scripts/run_dcf.py \
 - 主估值结果
 - 精简版 `sensitivity` 摘要
 - `artifacts.sensitivity_heatmap_path`，默认指向 PNG 图表路径
-- `artifacts.sensitivity_heatmap_png_path` 和 `artifacts.sensitivity_heatmap_svg_path`
+- `artifacts.sensitivity_heatmap_svg_path`，指向 SVG 图表路径
 
 如果你确实要覆盖默认图表路径，也可以继续显式指定：
 

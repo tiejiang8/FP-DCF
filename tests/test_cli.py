@@ -33,7 +33,6 @@ def test_cli_runs_against_sample_input(tmp_path: Path):
     assert payload["sensitivity"]["metric"] == "per_share_value"
     assert "grid" not in payload["sensitivity"]
     assert payload["artifacts"]["sensitivity_heatmap_path"] == str(output_path.with_name("out.sensitivity.png"))
-    assert payload["artifacts"]["sensitivity_heatmap_png_path"] == str(output_path.with_name("out.sensitivity.png"))
     assert payload["artifacts"]["sensitivity_heatmap_svg_path"] == str(output_path.with_name("out.sensitivity.svg"))
     assert output_path.with_name("out.sensitivity.svg").exists()
     assert output_path.with_name("out.sensitivity.png").exists()
@@ -159,7 +158,6 @@ def test_cli_embeds_sensitivity_and_artifact_path(tmp_path: Path, monkeypatch):
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["sensitivity"]["base_metric_value"] == 100.0
     assert payload["artifacts"]["sensitivity_heatmap_path"] == str(chart_path.with_suffix(".png").resolve())
-    assert payload["artifacts"]["sensitivity_heatmap_png_path"] == str(chart_path.with_suffix(".png").resolve())
     assert payload["artifacts"]["sensitivity_heatmap_svg_path"] == str(chart_path.resolve())
     assert calls == {
         "metric": "per_share_value",
@@ -231,7 +229,6 @@ def test_cli_generates_default_chart_path_when_not_supplied(tmp_path: Path, monk
     assert rc == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["artifacts"]["sensitivity_heatmap_path"] == str(expected_png_path)
-    assert payload["artifacts"]["sensitivity_heatmap_png_path"] == str(expected_png_path)
     assert payload["artifacts"]["sensitivity_heatmap_svg_path"] == str(expected_svg_path)
     assert calls == {
         "rendered": [

@@ -273,7 +273,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 artifacts = dict(result.get("artifacts") or {})
                 artifacts["sensitivity_heatmap_path"] = str(rendered_png_path)
-                artifacts["sensitivity_heatmap_png_path"] = str(rendered_png_path)
                 artifacts["sensitivity_heatmap_svg_path"] = str(rendered_svg_path)
                 result["artifacts"] = artifacts
 
