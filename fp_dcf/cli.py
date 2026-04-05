@@ -30,12 +30,19 @@ def _truthy(value) -> bool:
     return bool(value)
 
 
+def _has_value(value) -> bool:
+    return value not in (None, "")
+
+
 def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dict | None:
     config = payload.get("sensitivity") or {}
     if not isinstance(config, dict):
         config = {}
 
-    enabled = any(
+    if args.no_sensitivity:
+        return None
+
+    cli_requested = any(
         [
             args.sensitivity,
             args.sensitivity_metric is not None,
@@ -45,16 +52,33 @@ def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dic
             args.sensitivity_wacc_step_bps is not None,
             args.sensitivity_growth_range_bps is not None,
             args.sensitivity_growth_step_bps is not None,
-            _truthy(config.get("enabled")),
-            config.get("metric") not in (None, ""),
-            config.get("chart_path") not in (None, ""),
         ]
     )
+    config_requested = any(
+        [
+            _has_value(config.get("enabled")),
+            _has_value(config.get("metric")),
+            _has_value(config.get("chart_path")),
+            _has_value(config.get("title")),
+            _has_value(config.get("wacc_range_bps")),
+            _has_value(config.get("wacc_step_bps")),
+            _has_value(config.get("growth_range_bps")),
+            _has_value(config.get("growth_step_bps")),
+        ]
+    )
+
+    enabled = True
+    if cli_requested:
+        enabled = True
+    elif _has_value(config.get("enabled")):
+        enabled = _truthy(config.get("enabled"))
+    elif config_requested:
+        enabled = True
     if not enabled:
         return None
 
     return {
-        "metric": args.sensitivity_metric or config.get("metric") or "per_share_value",
+        "metric": args.sensitivity_metric or config.get("metric"),
         "chart_path": args.sensitivity_chart_output or config.get("chart_path"),
         "title": args.sensitivity_title or config.get("title"),
         "wacc_range_bps": args.sensitivity_wacc_range_bps
@@ -95,7 +119,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sensitivity",
         action="store_true",
-        help="Include a WACC x terminal growth sensitivity grid in the output JSON.",
+        help="Explicitly include a WACC x terminal growth sensitivity grid in the output JSON. This is enabled by default.",
+    )
+    parser.add_argument(
+        "--no-sensitivity",
+        action="store_true",
+        help="Disable the default WACC x terminal growth sensitivity grid.",
     )
     parser.add_argument(
         "--sensitivity-metric",
@@ -157,14 +186,33 @@ def main(argv: list[str] | None = None) -> int:
 
         sensitivity_request = _resolve_sensitivity_request(payload, args)
         if sensitivity_request is not None:
-            sensitivity = build_wacc_terminal_growth_sensitivity(
-                payload,
-                metric=sensitivity_request["metric"],
-                wacc_range_bps=sensitivity_request["wacc_range_bps"],
-                wacc_step_bps=sensitivity_request["wacc_step_bps"],
-                growth_range_bps=sensitivity_request["growth_range_bps"],
-                growth_step_bps=sensitivity_request["growth_step_bps"],
+            requested_metric = sensitivity_request["metric"]
+            metric_candidates = (
+                [requested_metric]
+                if requested_metric
+                else ["per_share_value", "equity_value", "enterprise_value"]
             )
+            sensitivity = None
+            last_exc: Exception | None = None
+            for metric in metric_candidates:
+                try:
+                    sensitivity = build_wacc_terminal_growth_sensitivity(
+                        payload,
+                        metric=metric,
+                        wacc_range_bps=sensitivity_request["wacc_range_bps"],
+                        wacc_step_bps=sensitivity_request["wacc_step_bps"],
+                        growth_range_bps=sensitivity_request["growth_range_bps"],
+                        growth_step_bps=sensitivity_request["growth_step_bps"],
+                    )
+                except ValueError as exc:
+                    last_exc = exc
+                    continue
+                else:
+                    if requested_metric is None and metric != "per_share_value":
+                        sensitivity.diagnostics.append(f"sensitivity_metric_auto_fallback:{metric}")
+                    break
+            if sensitivity is None:
+                raise last_exc or ValueError("Unable to build sensitivity output")
             result["sensitivity"] = sensitivity.to_dict()
 
             chart_path = sensitivity_request["chart_path"]

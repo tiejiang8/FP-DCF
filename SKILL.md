@@ -51,7 +51,6 @@ If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity 
 python3 {baseDir}/scripts/run_dcf.py \
   --input /path/to/input.json \
   --output /path/to/output.json \
-  --sensitivity \
   --sensitivity-chart-output /path/to/heatmap.svg \
   --pretty
 ```
@@ -106,6 +105,11 @@ The payload can also request sensitivity analysis through an optional `sensitivi
 - `sensitivity.wacc_step_bps`
 - `sensitivity.growth_range_bps`
 - `sensitivity.growth_step_bps`
+
+Sensitivity output is enabled by default. To disable it for a specific run:
+
+- pass `--no-sensitivity`, or
+- set `sensitivity.enabled=false`
 
 Live Yahoo-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
 
@@ -169,7 +173,7 @@ Always return:
 - If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
 - Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
 - If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
-- If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with `--sensitivity` and `--sensitivity-chart-output` over a separate second command.
+- If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with the default sensitivity output and optional `--sensitivity-chart-output` over a separate second command.
 - If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.

@@ -30,6 +30,7 @@ def test_cli_runs_against_sample_input(tmp_path: Path):
     assert payload["ticker"] == "AAPL"
     assert payload["valuation_model"] == "steady_state_single_stage"
     assert payload["valuation"]["enterprise_value"] > 0
+    assert payload["sensitivity"]["metric"] == "per_share_value"
 
 
 def test_cli_passes_cache_options_to_normalizer(tmp_path: Path, monkeypatch):
@@ -67,6 +68,7 @@ def test_cli_passes_cache_options_to_normalizer(tmp_path: Path, monkeypatch):
             "--cache-dir",
             str(tmp_path / "cache"),
             "--refresh-provider",
+            "--no-sensitivity",
         ]
     )
 
@@ -155,3 +157,100 @@ def test_cli_embeds_sensitivity_and_artifact_path(tmp_path: Path, monkeypatch):
         "metric": "per_share_value",
         "rendered": str(chart_path.resolve()),
     }
+
+
+def test_cli_can_disable_default_sensitivity(tmp_path: Path, monkeypatch):
+    input_path = tmp_path / "input.json"
+    output_path = tmp_path / "out.json"
+    input_path.write_text('{"ticker":"AAPL","market":"US"}', encoding="utf-8")
+
+    def fake_normalize_payload(payload, provider_override=None, *, cache_dir=None, force_refresh=None):
+        return payload
+
+    class _FakeResult:
+        def to_dict(self):
+            return {
+                "ticker": "AAPL",
+                "market": "US",
+                "valuation_model": "steady_state_single_stage",
+                "valuation": {"enterprise_value": 1.0},
+            }
+
+    monkeypatch.setattr(cli, "normalize_payload", fake_normalize_payload)
+    monkeypatch.setattr(cli, "run_valuation", lambda payload: _FakeResult())
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--no-sensitivity",
+            "--pretty",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert "sensitivity" not in payload
+
+
+def test_cli_auto_falls_back_sensitivity_metric_when_per_share_unavailable(tmp_path: Path, monkeypatch):
+    input_path = tmp_path / "input.json"
+    output_path = tmp_path / "out.json"
+    input_path.write_text('{"ticker":"AAPL","market":"US"}', encoding="utf-8")
+
+    def fake_normalize_payload(payload, provider_override=None, *, cache_dir=None, force_refresh=None):
+        return payload
+
+    class _FakeResult:
+        def to_dict(self):
+            return {
+                "ticker": "AAPL",
+                "market": "US",
+                "valuation_model": "steady_state_single_stage",
+                "valuation": {"enterprise_value": 1.0},
+            }
+
+    calls = {"metrics": []}
+
+    def fake_build(payload, **kwargs):
+        metric = kwargs["metric"]
+        calls["metrics"].append(metric)
+        if metric == "per_share_value":
+            raise ValueError("Unable to compute sensitivity metric 'per_share_value'")
+        return SensitivityHeatmapOutput(
+            ticker="AAPL",
+            market="US",
+            valuation_model="steady_state_single_stage",
+            metric=metric,
+            metric_label="Equity Value" if metric == "equity_value" else "Enterprise Value",
+            currency="USD",
+            base_wacc=0.09,
+            base_terminal_growth_rate=0.03,
+            base_metric_value=100.0,
+            wacc_values=[0.08, 0.09],
+            terminal_growth_values=[0.02, 0.03],
+            matrix=[[90.0, 100.0], [80.0, 90.0]],
+            diagnostics=[],
+        )
+
+    monkeypatch.setattr(cli, "normalize_payload", fake_normalize_payload)
+    monkeypatch.setattr(cli, "run_valuation", lambda payload: _FakeResult())
+    monkeypatch.setattr(cli, "build_wacc_terminal_growth_sensitivity", fake_build)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--pretty",
+        ]
+    )
+
+    assert rc == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["sensitivity"]["metric"] == "equity_value"
+    assert "sensitivity_metric_auto_fallback:equity_value" in payload["sensitivity"]["diagnostics"]
+    assert calls["metrics"] == ["per_share_value", "equity_value"]

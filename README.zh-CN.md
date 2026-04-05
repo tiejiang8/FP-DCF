@@ -104,6 +104,7 @@ python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
 ## 敏感性热力图
 
 `FP-DCF` 现在支持把 `WACC x Terminal Growth` 敏感性分析直接附加到主估值输出 JSON 中；如果安装了可选绘图依赖，还可以在同一次执行里额外渲染 `svg/png` 图表。
+这块敏感性输出现在默认开启。
 
 命令行示例：
 
@@ -111,7 +112,6 @@ python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
 python3 scripts/run_dcf.py \
   --input examples/sample_input_yahoo.json \
   --output /tmp/aapl_output.json \
-  --sensitivity \
   --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
@@ -127,13 +127,28 @@ python3 scripts/run_dcf.py \
 ```json
 {
   "sensitivity": {
-    "enabled": true,
     "metric": "per_share_value",
     "chart_path": "/tmp/aapl_sensitivity.svg",
     "wacc_range_bps": 200,
     "wacc_step_bps": 100,
     "growth_range_bps": 100,
     "growth_step_bps": 50
+  }
+}
+```
+
+如果你想在某次运行里关闭 sensitivity，可以用：
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity --pretty
+```
+
+或者在输入 JSON 中写：
+
+```json
+{
+  "sensitivity": {
+    "enabled": false
   }
 }
 ```

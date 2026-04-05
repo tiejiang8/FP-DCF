@@ -199,6 +199,7 @@ For a live Yahoo-backed smoke run, install the runtime deps and execute the same
 ## Sensitivity Heatmap
 
 FP-DCF can attach a `WACC x Terminal Growth` sensitivity grid to the main valuation output JSON, and optionally render a chart artifact in the same run.
+This sensitivity block is enabled by default.
 
 CLI example:
 
@@ -206,7 +207,6 @@ CLI example:
 python3 scripts/run_dcf.py \
   --input examples/sample_input_yahoo.json \
   --output /tmp/aapl_output.json \
-  --sensitivity \
   --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
@@ -222,13 +222,28 @@ You can also drive this entirely from the input payload:
 ```json
 {
   "sensitivity": {
-    "enabled": true,
     "metric": "per_share_value",
     "chart_path": "/tmp/aapl_sensitivity.svg",
     "wacc_range_bps": 200,
     "wacc_step_bps": 100,
     "growth_range_bps": 100,
     "growth_step_bps": 50
+  }
+}
+```
+
+If you want to disable sensitivity for a specific run, use:
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity --pretty
+```
+
+Or in the payload:
+
+```json
+{
+  "sensitivity": {
+    "enabled": false
   }
 }
 ```
