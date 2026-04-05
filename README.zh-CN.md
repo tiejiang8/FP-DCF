@@ -116,7 +116,7 @@ python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 
 ## 敏感性热力图
 
-`FP-DCF` 现在会默认把 `WACC x Terminal Growth` 敏感性分析附加到主估值输出 JSON 中，并在同一次执行里自动渲染 `svg/png` 图表。
+`FP-DCF` 现在会默认把精简版的 `WACC x Terminal Growth` 敏感性摘要附加到主估值输出 JSON 中，并在同一次执行里自动渲染 `svg/png` 图表。
 
 命令行示例：
 
@@ -130,14 +130,16 @@ python3 scripts/run_dcf.py \
 这一条命令会直接生成：
 
 - `/tmp/aapl_output.json`
-- JSON 里的 `sensitivity` 热力图网格
+- JSON 里的精简 `sensitivity` 摘要
 - 自动落盘的 `/tmp/aapl_output.sensitivity.svg`
+- 自动落盘的 `/tmp/aapl_output.sensitivity.png`
 
 生成的 `output.json` 会同时包含：
 
 - 主估值结果
-- 结构化 `sensitivity` 热力图网格
-- `artifacts.sensitivity_heatmap_path`，指向自动生成的图表路径
+- 精简版 `sensitivity` 摘要
+- `artifacts.sensitivity_heatmap_path`，默认指向 PNG 图表路径
+- `artifacts.sensitivity_heatmap_png_path` 和 `artifacts.sensitivity_heatmap_svg_path`
 
 如果你确实要覆盖默认图表路径，也可以继续显式指定：
 
@@ -160,6 +162,16 @@ python3 scripts/run_dcf.py \
     "wacc_step_bps": 100,
     "growth_range_bps": 100,
     "growth_step_bps": 50
+  }
+}
+```
+
+如果你需要把完整数值网格也放进 JSON，可以在 payload 里显式开启：
+
+```json
+{
+  "sensitivity": {
+    "detail": true
   }
 }
 ```

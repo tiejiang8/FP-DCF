@@ -49,76 +49,30 @@
   ],
   "warnings": [],
   "sensitivity": {
-    "ticker": "AAPL",
-    "market": "US",
-    "valuation_model": "steady_state_single_stage",
     "metric": "per_share_value",
     "metric_label": "Per Share Value",
-    "currency": "USD",
-    "as_of_date": "2026-04-05",
     "base_wacc": 0.091262,
     "base_terminal_growth_rate": 0.03,
     "base_metric_value": 112.24525194214796,
-    "wacc_values": [
-      0.071262,
-      0.081262,
-      0.091262,
-      0.101262,
-      0.111262
-    ],
-    "terminal_growth_values": [
-      0.02,
-      0.025,
-      0.03,
-      0.035,
-      0.04
-    ],
-    "matrix": [
-      [
-        133.3846841211688,
-        148.86229762879307,
-        168.09096864880752,
-        192.62234526145735,
-        225.00074913168822
-      ],
-      [
-        111.12742414652666,
-        121.87604766180345,
-        134.7214726119203,
-        150.34356630746893,
-        169.75173282923757
-      ],
-      [
-        95.11676403566668,
-        103.03511475949335,
-        112.24600420615421,
-        123.09403585299651,
-        136.0582611026718
-      ],
-      [
-        83.04660750848907,
-        89.13528828038484,
-        96.07837683930538,
-        104.06928897115165,
-        113.36458426578176
-      ],
-      [
-        73.6216168832592,
-        78.45816159472153,
-        83.88988544421429,
-        90.03385442883234,
-        97.03998964294414
-      ]
-    ],
+    "wacc_axis": {
+      "min": 0.071262,
+      "max": 0.111262,
+      "points": 5
+    },
+    "terminal_growth_axis": {
+      "min": 0.02,
+      "max": 0.04,
+      "points": 5
+    },
     "diagnostics": [
-      "tax_rate_paths_are_separated",
-      "valuation_model_steady_state_single_stage",
       "sensitivity_heatmap:wacc_x_terminal_growth",
       "sensitivity_metric:per_share_value"
     ],
     "warnings": []
   },
   "artifacts": {
-    "sensitivity_heatmap_path": "examples/sample_output.sensitivity.svg"
+    "sensitivity_heatmap_path": "examples/sample_output.sensitivity.png",
+    "sensitivity_heatmap_png_path": "examples/sample_output.sensitivity.png",
+    "sensitivity_heatmap_svg_path": "examples/sample_output.sensitivity.svg"
   }
 }

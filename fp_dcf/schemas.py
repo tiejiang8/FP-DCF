@@ -91,3 +91,42 @@ class SensitivityHeatmapOutput:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def to_summary_dict(
+        self,
+        *,
+        include_grid: bool = False,
+        exclude_diagnostics: set[str] | None = None,
+        exclude_warnings: set[str] | None = None,
+    ) -> dict:
+        exclude_diagnostics = exclude_diagnostics or set()
+        exclude_warnings = exclude_warnings or set()
+
+        summary = {
+            "metric": self.metric,
+            "metric_label": self.metric_label,
+            "base_wacc": self.base_wacc,
+            "base_terminal_growth_rate": self.base_terminal_growth_rate,
+            "base_metric_value": self.base_metric_value,
+            "wacc_axis": {
+                "min": self.wacc_values[0] if self.wacc_values else None,
+                "max": self.wacc_values[-1] if self.wacc_values else None,
+                "points": len(self.wacc_values),
+            },
+            "terminal_growth_axis": {
+                "min": self.terminal_growth_values[0] if self.terminal_growth_values else None,
+                "max": self.terminal_growth_values[-1] if self.terminal_growth_values else None,
+                "points": len(self.terminal_growth_values),
+            },
+            "diagnostics": [item for item in self.diagnostics if item not in exclude_diagnostics],
+            "warnings": [item for item in self.warnings if item not in exclude_warnings],
+        }
+
+        if include_grid:
+            summary["grid"] = {
+                "wacc_values": list(self.wacc_values),
+                "terminal_growth_values": list(self.terminal_growth_values),
+                "matrix": [list(row) for row in self.matrix],
+            }
+
+        return summary

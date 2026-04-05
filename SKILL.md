@@ -44,7 +44,7 @@ If the runtime needs an isolated cache location, pass:
 python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --cache-dir /path/to/cache
 ```
 
-The main runner already returns the structured sensitivity grid and auto-renders a chart artifact by default. If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, keep using the same main runner so the valuation JSON and artifact path come back in a single output:
+The main runner already returns a compact sensitivity summary and auto-renders both SVG and PNG chart artifacts by default. If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, keep using the same main runner so the valuation JSON and artifact paths come back in a single output:
 
 ```bash
 python3 {baseDir}/scripts/run_dcf.py \
@@ -53,7 +53,7 @@ python3 {baseDir}/scripts/run_dcf.py \
   --pretty
 ```
 
-That one command will default the chart artifact path to `/path/to/output.sensitivity.svg`.
+That one command will default the chart artifact paths to `/path/to/output.sensitivity.svg` and `/path/to/output.sensitivity.png`.
 
 ## Input Shape
 
@@ -113,6 +113,7 @@ The payload can also request sensitivity analysis through an optional `sensitivi
 
 - `sensitivity.enabled`
 - `sensitivity.metric`
+- `sensitivity.detail`
 - `sensitivity.chart_path`
 - `sensitivity.wacc_range_bps`
 - `sensitivity.wacc_step_bps`
@@ -177,7 +178,7 @@ Always return:
 - enterprise value, equity value, and per-share value when available
 - provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
-- by default, return both the structured sensitivity grid and the chart file path
+- by default, return a compact sensitivity summary plus both chart file paths
 
 ## Execution Notes
 
@@ -187,6 +188,7 @@ Always return:
 - Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
 - If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
 - If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with its default sensitivity output and auto-generated chart path over a separate second command.
+- If the caller needs the full numeric heatmap grid in JSON, set `sensitivity.detail=true` instead of bloating the default output for every run.
 - Only use `--sensitivity-chart-output` or `sensitivity.chart_path` when the caller explicitly wants to override the default artifact location.
 - If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.

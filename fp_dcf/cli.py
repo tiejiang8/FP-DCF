@@ -46,6 +46,25 @@ def _default_chart_path(args: argparse.Namespace, payload: dict, result: dict) -
     return Path.cwd() / f"{ticker}_sensitivity.svg"
 
 
+def _resolve_chart_paths(chart_path: str | Path) -> tuple[Path, Path]:
+    path = Path(chart_path).expanduser()
+    suffix = path.suffix.lower()
+
+    if suffix == ".png":
+        png_path = path
+        svg_path = path.with_suffix(".svg")
+    elif suffix == ".svg":
+        svg_path = path
+        png_path = path.with_suffix(".png")
+    else:
+        if suffix:
+            path = path.with_suffix("")
+        svg_path = path.with_suffix(".svg")
+        png_path = path.with_suffix(".png")
+
+    return svg_path, png_path
+
+
 def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dict | None:
     config = payload.get("sensitivity") or {}
     if not isinstance(config, dict):
@@ -70,6 +89,8 @@ def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dic
         [
             _has_value(config.get("enabled")),
             _has_value(config.get("metric")),
+            _has_value(config.get("detail")),
+            _has_value(config.get("include_grid")),
             _has_value(config.get("chart_path")),
             _has_value(config.get("title")),
             _has_value(config.get("wacc_range_bps")),
@@ -91,6 +112,7 @@ def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dic
 
     return {
         "metric": args.sensitivity_metric or config.get("metric"),
+        "detail": _truthy(config.get("detail")) or _truthy(config.get("include_grid")),
         "chart_path": args.sensitivity_chart_output or config.get("chart_path"),
         "title": args.sensitivity_title or config.get("title"),
         "wacc_range_bps": args.sensitivity_wacc_range_bps
@@ -142,15 +164,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--sensitivity-metric",
         choices=["per_share_value", "equity_value", "enterprise_value"],
         default=None,
-        help="Metric to use when generating the optional sensitivity grid.",
+        help="Metric to use when generating the default sensitivity summary.",
     )
     parser.add_argument(
         "--sensitivity-chart-output",
         default=None,
         help=(
-            "Override the default rendered sensitivity heatmap path. "
+            "Override the default rendered sensitivity chart base path. "
             "By default FP-DCF writes a sibling *.sensitivity.svg next to --output, "
-            "or a cwd-based fallback path when writing JSON to stdout."
+            "or a cwd-based fallback path when writing JSON to stdout. "
+            "FP-DCF also writes a sibling PNG beside the SVG."
         ),
     )
     parser.add_argument(
@@ -162,25 +185,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--sensitivity-wacc-range-bps",
         type=int,
         default=None,
-        help="Basis-point range above and below base WACC for the optional sensitivity grid.",
+        help="Basis-point range above and below base WACC for the default sensitivity chart.",
     )
     parser.add_argument(
         "--sensitivity-wacc-step-bps",
         type=int,
         default=None,
-        help="Basis-point step size for the optional WACC sensitivity axis.",
+        help="Basis-point step size for the default WACC sensitivity axis.",
     )
     parser.add_argument(
         "--sensitivity-growth-range-bps",
         type=int,
         default=None,
-        help="Basis-point range above and below base terminal growth for the optional sensitivity grid.",
+        help="Basis-point range above and below base terminal growth for the default sensitivity chart.",
     )
     parser.add_argument(
         "--sensitivity-growth-step-bps",
         type=int,
         default=None,
-        help="Basis-point step size for the optional terminal growth sensitivity axis.",
+        help="Basis-point step size for the default terminal growth sensitivity axis.",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the output JSON.")
     return parser
@@ -229,17 +252,29 @@ def main(argv: list[str] | None = None) -> int:
                     break
             if sensitivity is None:
                 raise last_exc or ValueError("Unable to build sensitivity output")
-            result["sensitivity"] = sensitivity.to_dict()
+            result["sensitivity"] = sensitivity.to_summary_dict(
+                include_grid=sensitivity_request["detail"],
+                exclude_diagnostics=set(result.get("diagnostics") or []),
+                exclude_warnings=set(result.get("warnings") or []),
+            )
 
             chart_path = sensitivity_request["chart_path"] or _default_chart_path(args, payload, result)
             if chart_path:
-                rendered_path = render_wacc_terminal_growth_heatmap(
+                svg_path, png_path = _resolve_chart_paths(chart_path)
+                rendered_svg_path = render_wacc_terminal_growth_heatmap(
                     sensitivity,
-                    Path(chart_path).expanduser(),
+                    svg_path,
+                    title=sensitivity_request["title"],
+                )
+                rendered_png_path = render_wacc_terminal_growth_heatmap(
+                    sensitivity,
+                    png_path,
                     title=sensitivity_request["title"],
                 )
                 artifacts = dict(result.get("artifacts") or {})
-                artifacts["sensitivity_heatmap_path"] = str(rendered_path)
+                artifacts["sensitivity_heatmap_path"] = str(rendered_png_path)
+                artifacts["sensitivity_heatmap_png_path"] = str(rendered_png_path)
+                artifacts["sensitivity_heatmap_svg_path"] = str(rendered_svg_path)
                 result["artifacts"] = artifacts
 
         text = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False)

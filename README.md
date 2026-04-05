@@ -210,7 +210,7 @@ For a live Yahoo-backed smoke run, install the runtime deps and execute the same
 
 ## Sensitivity Heatmap
 
-FP-DCF attaches a `WACC x Terminal Growth` sensitivity grid to the main valuation output JSON by default and auto-renders a chart artifact in the same run.
+FP-DCF attaches a compact `WACC x Terminal Growth` sensitivity summary to the main valuation output JSON by default and auto-renders chart artifacts in the same run.
 
 CLI example:
 
@@ -224,14 +224,16 @@ python3 scripts/run_dcf.py \
 That single command will:
 
 - write the valuation JSON to `/tmp/aapl_output.json`
-- attach the structured `sensitivity` grid to the JSON
+- attach a compact `sensitivity` summary to the JSON
 - auto-render the heatmap to `/tmp/aapl_output.sensitivity.svg`
+- auto-render a display-friendly PNG to `/tmp/aapl_output.sensitivity.png`
 
 The resulting `output.json` includes:
 
 - the core valuation result
-- a `sensitivity` object with the structured heatmap grid
-- an `artifacts.sensitivity_heatmap_path` entry pointing to the rendered chart file
+- a compact `sensitivity` object with the base case and axis summary
+- an `artifacts.sensitivity_heatmap_path` entry pointing to the PNG chart
+- `artifacts.sensitivity_heatmap_png_path` and `artifacts.sensitivity_heatmap_svg_path`
 
 If you want to override the default chart path, you can still do that from the CLI:
 
@@ -254,6 +256,16 @@ You can also drive the override from the input payload:
     "wacc_step_bps": 100,
     "growth_range_bps": 100,
     "growth_step_bps": 50
+  }
+}
+```
+
+If you need the full numeric grid in JSON, opt in from the payload:
+
+```json
+{
+  "sensitivity": {
+    "detail": true
   }
 }
 ```
