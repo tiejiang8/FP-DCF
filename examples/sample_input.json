@@ -1,0 +1,19 @@
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "as_of_date": "2026-04-05",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "marginal_tax_rate": 0.21,
+    "equity_risk_premium": 0.05,
+    "pre_tax_cost_of_debt": 0.032,
+    "fcff_projection": "mean_tail",
+    "fcff_projection_years": 3
+  },
+  "options": {
+    "auto_capital_structure": true,
+    "financial_dcf_policy": "downgrade"
+  }
+}
