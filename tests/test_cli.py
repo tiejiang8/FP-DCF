@@ -31,6 +31,8 @@ def test_cli_runs_against_sample_input(tmp_path: Path):
     assert payload["valuation_model"] == "steady_state_single_stage"
     assert payload["valuation"]["enterprise_value"] > 0
     assert payload["sensitivity"]["metric"] == "per_share_value"
+    assert payload["artifacts"]["sensitivity_heatmap_path"] == str(output_path.with_name("out.sensitivity.svg"))
+    assert output_path.with_name("out.sensitivity.svg").exists()
 
 
 def test_cli_passes_cache_options_to_normalizer(tmp_path: Path, monkeypatch):
@@ -156,6 +158,71 @@ def test_cli_embeds_sensitivity_and_artifact_path(tmp_path: Path, monkeypatch):
     assert calls == {
         "metric": "per_share_value",
         "rendered": str(chart_path.resolve()),
+    }
+
+
+def test_cli_generates_default_chart_path_when_not_supplied(tmp_path: Path, monkeypatch):
+    input_path = tmp_path / "input.json"
+    output_path = tmp_path / "out.json"
+    input_path.write_text('{"ticker":"AAPL","market":"US"}', encoding="utf-8")
+
+    calls = {}
+
+    def fake_normalize_payload(payload, provider_override=None, *, cache_dir=None, force_refresh=None):
+        return payload
+
+    class _FakeResult:
+        def to_dict(self):
+            return {
+                "ticker": "AAPL",
+                "market": "US",
+                "valuation_model": "steady_state_single_stage",
+                "valuation": {"enterprise_value": 1.0, "per_share_value": 1.0},
+            }
+
+    def fake_build(payload, **kwargs):
+        return SensitivityHeatmapOutput(
+            ticker="AAPL",
+            market="US",
+            valuation_model="steady_state_single_stage",
+            metric="per_share_value",
+            metric_label="Per Share Value",
+            currency="USD",
+            base_wacc=0.09,
+            base_terminal_growth_rate=0.03,
+            base_metric_value=100.0,
+            wacc_values=[0.08, 0.09],
+            terminal_growth_values=[0.02, 0.03],
+            matrix=[[90.0, 100.0], [80.0, 90.0]],
+        )
+
+    def fake_render(heatmap, output_path_arg, *, title=None):
+        calls["rendered"] = str(output_path_arg)
+        Path(output_path_arg).write_text("<svg/>", encoding="utf-8")
+        return Path(output_path_arg)
+
+    monkeypatch.setattr(cli, "normalize_payload", fake_normalize_payload)
+    monkeypatch.setattr(cli, "run_valuation", lambda payload: _FakeResult())
+    monkeypatch.setattr(cli, "build_wacc_terminal_growth_sensitivity", fake_build)
+    monkeypatch.setattr(cli, "render_wacc_terminal_growth_heatmap", fake_render)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--pretty",
+        ]
+    )
+
+    expected_chart_path = output_path.with_name("out.sensitivity.svg")
+
+    assert rc == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["artifacts"]["sensitivity_heatmap_path"] == str(expected_chart_path)
+    assert calls == {
+        "rendered": str(expected_chart_path),
     }
 
 

@@ -15,8 +15,23 @@ def test_yahoo_provider_live_smoke(tmp_path: Path):
         pytest.skip("Set FP_DCF_RUN_YAHOO_TESTS=1 to run live Yahoo integration tests.")
 
     repo_root = Path(__file__).resolve().parents[1]
-    input_path = repo_root / "examples" / "sample_input_yahoo.json"
+    input_path = tmp_path / "input.json"
     output_path = tmp_path / "out.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "AAPL",
+                "market": "US",
+                "provider": "yahoo",
+                "statement_frequency": "A",
+                "valuation_model": "steady_state_single_stage",
+                "assumptions": {
+                    "terminal_growth_rate": 0.03,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     cmd = [
         sys.executable,

@@ -117,5 +117,8 @@
       "sensitivity_metric:per_share_value"
     ],
     "warnings": []
+  },
+  "artifacts": {
+    "sensitivity_heatmap_path": "examples/sample_output.sensitivity.svg"
   }
 }

@@ -34,6 +34,18 @@ def _has_value(value) -> bool:
     return value not in (None, "")
 
 
+def _default_chart_path(args: argparse.Namespace, payload: dict, result: dict) -> Path:
+    if args.output != "-":
+        output_path = Path(args.output).expanduser()
+        return output_path.with_name(f"{output_path.stem}.sensitivity.svg")
+
+    ticker = str(result.get("ticker") or payload.get("ticker") or "fp_dcf").strip().lower() or "fp_dcf"
+    if args.input != "-":
+        input_path = Path(args.input).expanduser()
+        return Path.cwd() / f"{input_path.stem}.sensitivity.svg"
+    return Path.cwd() / f"{ticker}_sensitivity.svg"
+
+
 def _resolve_sensitivity_request(payload: dict, args: argparse.Namespace) -> dict | None:
     config = payload.get("sensitivity") or {}
     if not isinstance(config, dict):
@@ -135,7 +147,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sensitivity-chart-output",
         default=None,
-        help="Optional output path for a rendered sensitivity heatmap artifact.",
+        help=(
+            "Override the default rendered sensitivity heatmap path. "
+            "By default FP-DCF writes a sibling *.sensitivity.svg next to --output, "
+            "or a cwd-based fallback path when writing JSON to stdout."
+        ),
     )
     parser.add_argument(
         "--sensitivity-title",
@@ -215,11 +231,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise last_exc or ValueError("Unable to build sensitivity output")
             result["sensitivity"] = sensitivity.to_dict()
 
-            chart_path = sensitivity_request["chart_path"]
+            chart_path = sensitivity_request["chart_path"] or _default_chart_path(args, payload, result)
             if chart_path:
                 rendered_path = render_wacc_terminal_growth_heatmap(
                     sensitivity,
-                    Path(chart_path).expanduser().resolve(),
+                    Path(chart_path).expanduser(),
                     title=sensitivity_request["title"],
                 )
                 artifacts = dict(result.get("artifacts") or {})

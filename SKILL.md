@@ -16,7 +16,6 @@ This repository is executable when installed as a skill because it includes a co
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
-- Provider-backed sample input: `{baseDir}/examples/sample_input_yahoo.json`
 
 Preferred execution pattern:
 
@@ -45,15 +44,16 @@ If the runtime needs an isolated cache location, pass:
 python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --cache-dir /path/to/cache
 ```
 
-If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, do it through the main runner so the valuation JSON and artifact path come back in a single output:
+The main runner already returns the structured sensitivity grid and auto-renders a chart artifact by default. If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, keep using the same main runner so the valuation JSON and artifact path come back in a single output:
 
 ```bash
 python3 {baseDir}/scripts/run_dcf.py \
   --input /path/to/input.json \
   --output /path/to/output.json \
-  --sensitivity-chart-output /path/to/heatmap.svg \
   --pretty
 ```
+
+That one command will default the chart artifact path to `/path/to/output.sensitivity.svg`.
 
 ## Input Shape
 
@@ -87,7 +87,20 @@ If those structured fields are mostly missing, the runner can auto-normalize the
 - `provider` is set to `yahoo`, or
 - the payload has a `ticker` but is missing core DCF inputs
 
-The minimal provider-backed input shape is shown in [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json).
+The minimal provider-backed input shape is:
+
+```json
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "provider": "yahoo",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03
+  }
+}
+```
 
 The payload can also drive normalization behavior through an optional `normalization` object:
 
@@ -164,7 +177,7 @@ Always return:
 - enterprise value, equity value, and per-share value when available
 - provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
-- if sensitivity analysis is requested, return both the structured sensitivity grid and the chart file path when one is rendered
+- by default, return both the structured sensitivity grid and the chart file path
 
 ## Execution Notes
 
@@ -173,7 +186,8 @@ Always return:
 - If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
 - Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
 - If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
-- If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with the default sensitivity output and optional `--sensitivity-chart-output` over a separate second command.
+- If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with its default sensitivity output and auto-generated chart path over a separate second command.
+- Only use `--sensitivity-chart-output` or `sensitivity.chart_path` when the caller explicitly wants to override the default artifact location.
 - If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
@@ -186,7 +200,6 @@ Read only what you need:
 - [references/methodology.md](./references/methodology.md) for the valuation methodology
 - [examples/sample_input.json](./examples/sample_input.json) for the intended input contract
 - [examples/sample_output.json](./examples/sample_output.json) for the intended output contract
-- [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json) for provider-backed ticker input
 
 ## Quality Bar
 

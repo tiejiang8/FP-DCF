@@ -71,7 +71,7 @@ This repository currently contains:
 - an agent-facing `SKILL.md` for OpenClaw-style runtimes
 - provider-backed normalization from Yahoo Finance
 - a default local cache for provider snapshots, plus a force-refresh path
-- an optional WACC x terminal growth sensitivity heatmap workflow
+- a default WACC x terminal growth sensitivity block with an auto-rendered chart artifact
 - JSON examples and tests for downstream agent integration
 
 ## Planned Scope
@@ -101,7 +101,6 @@ FP-DCF/
 ├── .gitignore
 ├── examples/
 │   ├── sample_input.json
-│   ├── sample_input_yahoo.json
 │   └── sample_output.json
 ├── scripts/
 │   ├── plot_sensitivity.py
@@ -160,7 +159,20 @@ The runner expects structured JSON input and emits structured JSON output suitab
 If you only have a ticker and want the runner to fill missing valuation inputs from Yahoo Finance, start from:
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
+cat > /tmp/fp_dcf_yahoo_input.json <<'JSON'
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "provider": "yahoo",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03
+  }
+}
+JSON
+
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 ```
 
 Yahoo-backed normalization uses a local cache by default so repeated runs do not re-fetch the same provider snapshot every time. The default cache path is:
@@ -172,13 +184,13 @@ Yahoo-backed normalization uses a local cache by default so repeated runs do not
 To force a fresh Yahoo pull and overwrite the cached snapshot for that ticker/request shape:
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --refresh-provider
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty --refresh-provider
 ```
 
 To override the cache directory:
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --cache-dir /tmp/fp-dcf-cache
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty --cache-dir /tmp/fp-dcf-cache
 ```
 
 You can also control normalization behavior from the JSON payload:
@@ -198,26 +210,40 @@ For a live Yahoo-backed smoke run, install the runtime deps and execute the same
 
 ## Sensitivity Heatmap
 
-FP-DCF can attach a `WACC x Terminal Growth` sensitivity grid to the main valuation output JSON, and optionally render a chart artifact in the same run.
-This sensitivity block is enabled by default.
+FP-DCF attaches a `WACC x Terminal Growth` sensitivity grid to the main valuation output JSON by default and auto-renders a chart artifact in the same run.
 
 CLI example:
 
 ```bash
 python3 scripts/run_dcf.py \
-  --input examples/sample_input_yahoo.json \
+  --input /tmp/fp_dcf_yahoo_input.json \
   --output /tmp/aapl_output.json \
-  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
+
+That single command will:
+
+- write the valuation JSON to `/tmp/aapl_output.json`
+- attach the structured `sensitivity` grid to the JSON
+- auto-render the heatmap to `/tmp/aapl_output.sensitivity.svg`
 
 The resulting `output.json` includes:
 
 - the core valuation result
 - a `sensitivity` object with the structured heatmap grid
-- an `artifacts.sensitivity_heatmap_path` entry when a chart file is rendered
+- an `artifacts.sensitivity_heatmap_path` entry pointing to the rendered chart file
 
-You can also drive this entirely from the input payload:
+If you want to override the default chart path, you can still do that from the CLI:
+
+```bash
+python3 scripts/run_dcf.py \
+  --input /tmp/fp_dcf_yahoo_input.json \
+  --output /tmp/aapl_output.json \
+  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
+  --pretty
+```
+
+You can also drive the override from the input payload:
 
 ```json
 {
@@ -258,7 +284,7 @@ Invalid cells where terminal growth is greater than or equal to WACC are left bl
 
 If `per_share_value` is unavailable because `shares_out` is missing, rerun with `--refresh-provider` or switch the heatmap metric to `equity_value` / `enterprise_value`.
 
-The standalone `scripts/plot_sensitivity.py` and `fp-dcf-sensitivity` entrypoint are still available for backward compatibility, but the primary workflow is now the main valuation runner.
+The standalone `scripts/plot_sensitivity.py` and `fp-dcf-sensitivity` entrypoint are still available for backward compatibility, but the primary one-click workflow is now the main valuation runner.
 
 ## Structured Output Direction
 
@@ -302,7 +328,6 @@ The public contract is meant to be machine-readable first. A typical response sh
 ```
 
 See [sample_input.json](./examples/sample_input.json) and [sample_output.json](./examples/sample_output.json) for a fuller example.
-For provider-backed normalization from Yahoo, see [sample_input_yahoo.json](./examples/sample_input_yahoo.json).
 Provider-backed runs also emit cache diagnostics such as `provider_cache_miss:yahoo`, `provider_cache_hit:yahoo`, and `provider_cache_refresh:yahoo`.
 
 ## Installation

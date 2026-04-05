@@ -77,7 +77,7 @@
 - 面向 OpenClaw 的 [SKILL.md](./SKILL.md)
 - 基于 Yahoo Finance 的 provider-backed normalization
 - 默认开启的 provider snapshot 本地缓存
-- 可选的 `WACC x Terminal Growth` 敏感性热力图工作流
+- 默认开启的 `WACC x Terminal Growth` 敏感性输出与自动热力图产物
 - 单阶段 / 两阶段 DCF 引擎与结构化输出
 - 对应的测试与示例输入输出
 
@@ -98,31 +98,58 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 只给 ticker，让程序自动从 Yahoo 补齐主要输入：
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
+cat > /tmp/fp_dcf_yahoo_input.json <<'JSON'
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "provider": "yahoo",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03
+  }
+}
+JSON
+
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 ```
 
 ## 敏感性热力图
 
-`FP-DCF` 现在支持把 `WACC x Terminal Growth` 敏感性分析直接附加到主估值输出 JSON 中；如果安装了可选绘图依赖，还可以在同一次执行里额外渲染 `svg/png` 图表。
-这块敏感性输出现在默认开启。
+`FP-DCF` 现在会默认把 `WACC x Terminal Growth` 敏感性分析附加到主估值输出 JSON 中，并在同一次执行里自动渲染 `svg/png` 图表。
 
 命令行示例：
 
 ```bash
 python3 scripts/run_dcf.py \
-  --input examples/sample_input_yahoo.json \
+  --input /tmp/fp_dcf_yahoo_input.json \
   --output /tmp/aapl_output.json \
-  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
+
+这一条命令会直接生成：
+
+- `/tmp/aapl_output.json`
+- JSON 里的 `sensitivity` 热力图网格
+- 自动落盘的 `/tmp/aapl_output.sensitivity.svg`
 
 生成的 `output.json` 会同时包含：
 
 - 主估值结果
 - 结构化 `sensitivity` 热力图网格
-- 如果渲染了图表，则在 `artifacts.sensitivity_heatmap_path` 中列出图表路径
+- `artifacts.sensitivity_heatmap_path`，指向自动生成的图表路径
 
-也可以完全通过输入 JSON 来驱动这条路径：
+如果你确实要覆盖默认图表路径，也可以继续显式指定：
+
+```bash
+python3 scripts/run_dcf.py \
+  --input /tmp/fp_dcf_yahoo_input.json \
+  --output /tmp/aapl_output.json \
+  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
+  --pretty
+```
+
+也可以完全通过输入 JSON 来驱动这条覆盖逻辑：
 
 ```json
 {
@@ -163,7 +190,7 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity -
 
 如果因为缺少 `shares_out` 而无法生成 `per_share_value` 热力图，可以先加 `--refresh-provider`，或者把 metric 切换为 `equity_value` / `enterprise_value`。
 
-为了兼容之前的用法，仓库里仍然保留了 `scripts/plot_sensitivity.py` 和 `fp-dcf-sensitivity` 入口，但现在推荐优先走主估值入口。
+为了兼容之前的用法，仓库里仍然保留了 `scripts/plot_sensitivity.py` 和 `fp-dcf-sensitivity` 入口，但现在推荐优先走主估值入口这一条一键路径。
 
 ## 缓存机制
 
@@ -176,13 +203,13 @@ Yahoo normalization 默认使用本地缓存，缓存目录默认是：
 如果你希望强制重新抓取 Yahoo 最新数据：
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --refresh-provider
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty --refresh-provider
 ```
 
 如果你希望把缓存写到指定目录：
 
 ```bash
-python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --cache-dir /tmp/fp-dcf-cache
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty --cache-dir /tmp/fp-dcf-cache
 ```
 
 也可以在 JSON 输入里控制 normalization 行为：
@@ -218,7 +245,6 @@ provider 路径会在输出 `diagnostics` 中标记缓存状态，例如：
 参考文件：
 
 - [sample_input.json](./examples/sample_input.json)
-- [sample_input_yahoo.json](./examples/sample_input_yahoo.json)
 - [sample_output.json](./examples/sample_output.json)
 
 ## 仓库结构
