@@ -1,6 +1,6 @@
 ---
-name: "fp_dcf"
-description: "Run a first-principles DCF valuation from structured JSON input and emit auditable FCFF, WACC, and intrinsic value output."
+name: "fp-dcf"
+description: "Estimate intrinsic value with a first-principles DCF from structured JSON or Yahoo-backed ticker input, and return auditable FCFF, WACC, and per-share value output."
 metadata: {"openclaw":{"emoji":"📉","homepage":"https://github.com/tiejiang8/FP-DCF","requires":{"anyBins":["python3","python"]}}}
 user-invocable: true
 ---
@@ -82,6 +82,7 @@ The minimal provider-backed input shape is shown in [examples/sample_input_yahoo
 The payload can also drive normalization behavior through an optional `normalization` object:
 
 - `normalization.provider`
+- `normalization.use_cache`
 - `normalization.refresh`
 - `normalization.cache_dir`
 
@@ -136,6 +137,7 @@ Always return:
 - working-capital source used
 - `WACC` inputs and capital weights
 - enterprise value, equity value, and per-share value when available
+- provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
 
 ## Execution Notes

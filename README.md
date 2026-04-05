@@ -1,6 +1,8 @@
 # FP-DCF
 
-A first-principles DCF skill and valuation engine scaffold for LLM agents and quantitative research workflows.
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
+A first-principles DCF skill and valuation engine for LLM agents and quantitative research workflows.
 
 `FP-DCF` is designed for one job: turning normalized public financial statements and market data into auditable `FCFF`, `WACC`, and intrinsic value estimates without mixing accounting shortcuts and valuation assumptions.
 
@@ -92,20 +94,31 @@ This repository currently contains:
 ```text
 FP-DCF/
 ├── README.md
+├── README.zh-CN.md
 ├── SKILL.md
 ├── pyproject.toml
 ├── .gitignore
 ├── examples/
 │   ├── sample_input.json
+│   ├── sample_input_yahoo.json
 │   └── sample_output.json
 ├── scripts/
 │   └── run_dcf.py
 ├── references/
 │   └── methodology.md
+├── tests/
+│   ├── test_cli.py
+│   ├── test_engine.py
+│   ├── test_normalize.py
+│   ├── test_schemas.py
+│   └── test_yahoo_integration.py
 └── fp_dcf/
     ├── __init__.py
     ├── cli.py
     ├── engine.py
+    ├── normalize.py
+    ├── providers/
+    │   └── yahoo.py
     └── schemas.py
 ```
 
@@ -161,6 +174,19 @@ To override the cache directory:
 python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty --cache-dir /tmp/fp-dcf-cache
 ```
 
+You can also control normalization behavior from the JSON payload:
+
+```json
+{
+  "normalization": {
+    "provider": "yahoo",
+    "use_cache": true,
+    "refresh": false,
+    "cache_dir": "/tmp/fp-dcf-cache"
+  }
+}
+```
+
 For a live Yahoo-backed smoke run, install the runtime deps and execute the same command. The output is date-sensitive and will change as Yahoo data changes.
 
 ## Structured Output Direction
@@ -206,11 +232,12 @@ The public contract is meant to be machine-readable first. A typical response sh
 
 See [sample_input.json](./examples/sample_input.json) and [sample_output.json](./examples/sample_output.json) for a fuller example.
 For provider-backed normalization from Yahoo, see [sample_input_yahoo.json](./examples/sample_input_yahoo.json).
+Provider-backed runs also emit cache diagnostics such as `provider_cache_miss:yahoo`, `provider_cache_hit:yahoo`, and `provider_cache_refresh:yahoo`.
 
 ## Installation
 
 ```bash
-pip install -e .
+python3 -m pip install .
 ```
 
 Current base dependencies:
@@ -222,6 +249,7 @@ Current base dependencies:
 For local development and tests:
 
 ```bash
+python3 -m pip install --upgrade pip
 pip install -e .[dev]
 ```
 
@@ -243,12 +271,9 @@ FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks, and PR expectations.
 
-## Publishing Notes
+## Current Limitations
 
-Before publishing to GitHub, the remaining high-signal tasks are:
-
-- choose a license
-- initialize the Git repository
-- add the first implementation modules
-- add minimal tests
-- decide whether the public repo is package-first, skill-first, or dual-mode
+- Yahoo-backed normalization depends on provider field quality and availability.
+- The provider cache does not yet support TTL or staleness policies.
+- Financial-sector companies are not yet handled by a dedicated valuation path.
+- Yahoo is the only live normalization provider currently implemented.
