@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a new capability or workflow improvement for FP-DCF.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user need or workflow gap does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any alternatives or workarounds you have already tried.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: Note whether this affects schemas, valuation logic, providers, docs, or CI.

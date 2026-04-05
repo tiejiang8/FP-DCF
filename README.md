@@ -174,6 +174,10 @@ Current base dependencies:
 4. Add tests for tax isolation and delta-NWC fallback selection.
 5. Add provider adapters and explicit financial-sector downgrade rules.
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks, and PR expectations.
+
 ## Publishing Notes
 
 Before publishing to GitHub, the remaining high-signal tasks are:
