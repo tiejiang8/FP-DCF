@@ -30,3 +30,6 @@ include = ["fp_dcf*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "integration: live network-backed integration tests",
+]

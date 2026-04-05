@@ -67,6 +67,8 @@ If those structured fields are mostly missing, the runner can auto-normalize the
 
 The minimal provider-backed input shape is shown in [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json).
 
+Live Yahoo-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
+
 ## Core Rules
 
 ### Tax Policy

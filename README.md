@@ -144,6 +144,8 @@ If you only have a ticker and want the runner to fill missing valuation inputs f
 python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
 ```
 
+For a live Yahoo-backed smoke run, install the runtime deps and execute the same command. The output is date-sensitive and will change as Yahoo data changes.
+
 ## Structured Output Direction
 
 The public contract is meant to be machine-readable first. A typical response shape looks like:
@@ -199,6 +201,18 @@ Current base dependencies:
 - `numpy`
 - `pandas`
 - `yfinance`
+
+For local development and tests:
+
+```bash
+pip install -e .[dev]
+```
+
+To run the optional live Yahoo integration test:
+
+```bash
+FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
+```
 
 ## Near-Term Roadmap
 
