@@ -14,7 +14,6 @@ Use this skill when the task is to estimate intrinsic value from structured fund
 This repository is executable when installed as a skill because it includes a concrete CLI entrypoint:
 
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
-- Sensitivity heatmap runner: `{baseDir}/scripts/plot_sensitivity.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
 - Provider-backed sample input: `{baseDir}/examples/sample_input_yahoo.json`
@@ -46,19 +45,14 @@ If the runtime needs an isolated cache location, pass:
 python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --cache-dir /path/to/cache
 ```
 
-If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, run:
+If the user explicitly asks for a `WACC x Terminal Growth` chart or sensitivity table, do it through the main runner so the valuation JSON and artifact path come back in a single output:
 
 ```bash
-python3 {baseDir}/scripts/plot_sensitivity.py --input /path/to/input.json --pretty
-```
-
-To render a chart artifact as well:
-
-```bash
-python3 {baseDir}/scripts/plot_sensitivity.py \
+python3 {baseDir}/scripts/run_dcf.py \
   --input /path/to/input.json \
-  --output /path/to/heatmap.svg \
-  --json-output /path/to/heatmap.json \
+  --output /path/to/output.json \
+  --sensitivity \
+  --sensitivity-chart-output /path/to/heatmap.svg \
   --pretty
 ```
 
@@ -102,6 +96,16 @@ The payload can also drive normalization behavior through an optional `normaliza
 - `normalization.use_cache`
 - `normalization.refresh`
 - `normalization.cache_dir`
+
+The payload can also request sensitivity analysis through an optional `sensitivity` object:
+
+- `sensitivity.enabled`
+- `sensitivity.metric`
+- `sensitivity.chart_path`
+- `sensitivity.wacc_range_bps`
+- `sensitivity.wacc_step_bps`
+- `sensitivity.growth_range_bps`
+- `sensitivity.growth_step_bps`
 
 Live Yahoo-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
 
@@ -165,7 +169,7 @@ Always return:
 - If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
 - Use the default provider cache for repeated runs on the same ticker unless the user explicitly asks for fresh data.
 - If the user asks for the latest market or statement snapshot, add `--refresh-provider` or set `normalization.refresh=true`.
-- If the user asks for a valuation sensitivity table or heatmap, prefer `{baseDir}/scripts/plot_sensitivity.py` over hand-rolling scenario loops.
+- If the user asks for a valuation sensitivity table or heatmap, prefer the main runner with `--sensitivity` and `--sensitivity-chart-output` over a separate second command.
 - If a chart artifact is requested but `matplotlib` is unavailable, still provide the structured sensitivity JSON and explain that chart rendering needs the optional `viz` dependencies.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.

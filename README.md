@@ -198,31 +198,42 @@ For a live Yahoo-backed smoke run, install the runtime deps and execute the same
 
 ## Sensitivity Heatmap
 
-FP-DCF also includes a dedicated sensitivity workflow for `WACC x Terminal Growth` visualization. The computation path remains JSON-first and can optionally render a chart artifact when the `viz` extras are installed.
+FP-DCF can attach a `WACC x Terminal Growth` sensitivity grid to the main valuation output JSON, and optionally render a chart artifact in the same run.
 
-Generate a structured sensitivity summary:
-
-```bash
-python3 scripts/plot_sensitivity.py --input examples/sample_input.json --pretty
-```
-
-Render an SVG heatmap plus a JSON summary:
+CLI example:
 
 ```bash
-python3 scripts/plot_sensitivity.py \
+python3 scripts/run_dcf.py \
   --input examples/sample_input_yahoo.json \
-  --output /tmp/aapl_sensitivity.svg \
-  --json-output /tmp/aapl_sensitivity.json \
+  --output /tmp/aapl_output.json \
+  --sensitivity \
+  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
 
-Use the packaged CLI after installing the project:
+The resulting `output.json` includes:
 
-```bash
-fp-dcf-sensitivity --input examples/sample_input.json --pretty
+- the core valuation result
+- a `sensitivity` object with the structured heatmap grid
+- an `artifacts.sensitivity_heatmap_path` entry when a chart file is rendered
+
+You can also drive this entirely from the input payload:
+
+```json
+{
+  "sensitivity": {
+    "enabled": true,
+    "metric": "per_share_value",
+    "chart_path": "/tmp/aapl_sensitivity.svg",
+    "wacc_range_bps": 200,
+    "wacc_step_bps": 100,
+    "growth_range_bps": 100,
+    "growth_step_bps": 50
+  }
+}
 ```
 
-The heatmap defaults to:
+Default heatmap settings:
 
 - `metric=per_share_value`
 - WACC range: base case `+/- 200 bps`
@@ -231,6 +242,8 @@ The heatmap defaults to:
 Invalid cells where terminal growth is greater than or equal to WACC are left blank and reported in the diagnostics.
 
 If `per_share_value` is unavailable because `shares_out` is missing, rerun with `--refresh-provider` or switch the heatmap metric to `equity_value` / `enterprise_value`.
+
+The standalone `scripts/plot_sensitivity.py` and `fp-dcf-sensitivity` entrypoint are still available for backward compatibility, but the primary workflow is now the main valuation runner.
 
 ## Structured Output Direction
 

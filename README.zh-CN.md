@@ -103,28 +103,39 @@ python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
 
 ## 敏感性热力图
 
-`FP-DCF` 现在也支持 `WACC x Terminal Growth` 敏感性分析。它仍然优先输出结构化 JSON；如果安装了可选绘图依赖，还可以额外渲染 `svg/png` 图表。
+`FP-DCF` 现在支持把 `WACC x Terminal Growth` 敏感性分析直接附加到主估值输出 JSON 中；如果安装了可选绘图依赖，还可以在同一次执行里额外渲染 `svg/png` 图表。
 
-只生成结构化敏感性摘要：
-
-```bash
-python3 scripts/plot_sensitivity.py --input examples/sample_input.json --pretty
-```
-
-同时生成热力图和 JSON 摘要：
+命令行示例：
 
 ```bash
-python3 scripts/plot_sensitivity.py \
+python3 scripts/run_dcf.py \
   --input examples/sample_input_yahoo.json \
-  --output /tmp/aapl_sensitivity.svg \
-  --json-output /tmp/aapl_sensitivity.json \
+  --output /tmp/aapl_output.json \
+  --sensitivity \
+  --sensitivity-chart-output /tmp/aapl_sensitivity.svg \
   --pretty
 ```
 
-如果已经安装成命令行工具，也可以直接运行：
+生成的 `output.json` 会同时包含：
 
-```bash
-fp-dcf-sensitivity --input examples/sample_input.json --pretty
+- 主估值结果
+- 结构化 `sensitivity` 热力图网格
+- 如果渲染了图表，则在 `artifacts.sensitivity_heatmap_path` 中列出图表路径
+
+也可以完全通过输入 JSON 来驱动这条路径：
+
+```json
+{
+  "sensitivity": {
+    "enabled": true,
+    "metric": "per_share_value",
+    "chart_path": "/tmp/aapl_sensitivity.svg",
+    "wacc_range_bps": 200,
+    "wacc_step_bps": 100,
+    "growth_range_bps": 100,
+    "growth_step_bps": 50
+  }
+}
 ```
 
 默认设置为：
@@ -136,6 +147,8 @@ fp-dcf-sensitivity --input examples/sample_input.json --pretty
 当 terminal growth 大于等于 WACC 时，对应单元格会留空，并在 `diagnostics` 中写明。
 
 如果因为缺少 `shares_out` 而无法生成 `per_share_value` 热力图，可以先加 `--refresh-provider`，或者把 metric 切换为 `equity_value` / `enterprise_value`。
+
+为了兼容之前的用法，仓库里仍然保留了 `scripts/plot_sensitivity.py` 和 `fp-dcf-sensitivity` 入口，但现在推荐优先走主估值入口。
 
 ## 缓存机制
 
