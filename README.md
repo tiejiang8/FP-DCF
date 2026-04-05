@@ -138,6 +138,12 @@ fp-dcf --input examples/sample_input.json --pretty
 
 The runner expects structured JSON input and emits structured JSON output suitable for OpenClaw-style skill execution.
 
+If you only have a ticker and want the runner to fill missing valuation inputs from Yahoo Finance, start from:
+
+```bash
+python3 scripts/run_dcf.py --input examples/sample_input_yahoo.json --pretty
+```
+
 ## Structured Output Direction
 
 The public contract is meant to be machine-readable first. A typical response shape looks like:
@@ -180,6 +186,7 @@ The public contract is meant to be machine-readable first. A typical response sh
 ```
 
 See [sample_input.json](./examples/sample_input.json) and [sample_output.json](./examples/sample_output.json) for a fuller example.
+For provider-backed normalization from Yahoo, see [sample_input_yahoo.json](./examples/sample_input_yahoo.json).
 
 ## Installation
 

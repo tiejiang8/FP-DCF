@@ -32,6 +32,7 @@ def _clip_rate(value: float | None, *, low: float = 0.0, high: float = 0.95) -> 
 def _normalize_weights(
     equity_weight: float | None,
     debt_weight: float | None,
+    source: str | None = None,
 ) -> tuple[float, float, str]:
     ew = _coerce_float(equity_weight)
     dw = _coerce_float(debt_weight)
@@ -48,7 +49,7 @@ def _normalize_weights(
     total = ew + dw
     if total <= 0:
         return 0.7, 0.3, "default"
-    return ew / total, dw / total, "manual_input"
+    return ew / total, dw / total, source or "manual_input"
 
 
 def _resolve_tax_inputs(
@@ -59,8 +60,20 @@ def _resolve_tax_inputs(
     assumptions = payload.get("assumptions") or {}
     effective = _clip_rate(_coerce_float(assumptions.get("effective_tax_rate")))
     marginal = _clip_rate(_coerce_float(assumptions.get("marginal_tax_rate")))
-    effective_source = "manual_input" if effective is not None else None
-    marginal_source = "manual_input" if marginal is not None else None
+    effective_source = (
+        assumptions.get("effective_tax_rate_source")
+        if effective is not None
+        else None
+    )
+    marginal_source = (
+        assumptions.get("marginal_tax_rate_source")
+        if marginal is not None
+        else None
+    )
+    if effective is not None and not effective_source:
+        effective_source = "manual_input"
+    if marginal is not None and not marginal_source:
+        marginal_source = "manual_input"
 
     if effective is None and marginal is not None:
         effective = marginal
@@ -156,10 +169,18 @@ def _compute_wacc(
     beta = _coerce_float(assumptions.get("beta"))
     rd = _clip_rate(_coerce_float(assumptions.get("pre_tax_cost_of_debt")), low=0.0, high=0.25)
 
-    rf_source = "manual_input" if rf is not None else "default"
-    erp_source = "manual_input" if erp is not None else "default"
-    beta_source = "manual_input" if beta is not None else "default"
-    rd_source = "manual_input" if rd is not None else "default"
+    rf_source = assumptions.get("risk_free_rate_source") if rf is not None else "default"
+    erp_source = assumptions.get("equity_risk_premium_source") if erp is not None else "default"
+    beta_source = assumptions.get("beta_source") if beta is not None else "default"
+    rd_source = assumptions.get("pre_tax_cost_of_debt_source") if rd is not None else "default"
+    if rf is not None and not rf_source:
+        rf_source = "manual_input"
+    if erp is not None and not erp_source:
+        erp_source = "manual_input"
+    if beta is not None and not beta_source:
+        beta_source = "manual_input"
+    if rd is not None and not rd_source:
+        rd_source = "manual_input"
 
     if rf is None:
         rf = 0.04
@@ -177,6 +198,7 @@ def _compute_wacc(
     equity_weight, debt_weight, weight_source = _normalize_weights(
         assumptions.get("equity_weight"),
         assumptions.get("debt_weight"),
+        assumptions.get("capital_structure_source"),
     )
     cost_of_equity = rf + beta * erp
     wacc = (
@@ -292,8 +314,8 @@ def run_valuation(payload: dict) -> ValuationOutput:
 
     fundamentals = payload.get("fundamentals") or {}
     assumptions = payload.get("assumptions") or {}
-    warnings: list[str] = []
-    diagnostics: list[str] = []
+    warnings: list[str] = list(payload.get("_prefill_warnings", []))
+    diagnostics: list[str] = list(payload.get("_prefill_diagnostics", []))
 
     tax = _resolve_tax_inputs(payload, warnings, diagnostics)
     fcff = _compute_fcff_anchor(fundamentals, tax, warnings)

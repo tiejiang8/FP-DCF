@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .engine import run_valuation
+from .normalize import normalize_payload
 
 
 def _load_payload(input_path: str) -> dict:
@@ -23,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a first-principles DCF valuation from JSON input.")
     parser.add_argument("--input", default="-", help="Path to the input JSON file. Use - to read from stdin.")
     parser.add_argument("--output", default="-", help="Path to write output JSON. Use - to write to stdout.")
+    parser.add_argument(
+        "--provider",
+        choices=["yahoo"],
+        default=None,
+        help="Optionally enrich missing inputs using a provider before valuation.",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print the output JSON.")
     return parser
 
@@ -33,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = _load_payload(args.input)
+        payload = normalize_payload(payload, provider_override=args.provider)
         result = run_valuation(payload).to_dict()
         text = json.dumps(result, indent=2 if args.pretty else None, ensure_ascii=False)
         if args.output == "-":

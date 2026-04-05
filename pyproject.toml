@@ -25,7 +25,8 @@ dev = [
 fp-dcf = "fp_dcf.cli:main"
 
 [tool.setuptools]
-packages = ["fp_dcf"]
+[tool.setuptools.packages.find]
+include = ["fp_dcf*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

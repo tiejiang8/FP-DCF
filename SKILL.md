@@ -16,6 +16,7 @@ This repository is executable when installed as a skill because it includes a co
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
+- Provider-backed sample input: `{baseDir}/examples/sample_input_yahoo.json`
 
 Preferred execution pattern:
 
@@ -58,6 +59,13 @@ If `fundamentals.fcff_anchor` is not supplied, the runner computes it from:
 - `da`
 - `capex`
 - `delta_nwc` or a fallback working-capital field
+
+If those structured fields are mostly missing, the runner can auto-normalize them from Yahoo when:
+
+- `provider` is set to `yahoo`, or
+- the payload has a `ticker` but is missing core DCF inputs
+
+The minimal provider-backed input shape is shown in [examples/sample_input_yahoo.json](./examples/sample_input_yahoo.json).
 
 ## Core Rules
 
@@ -114,6 +122,7 @@ Always return:
 
 - Use `{baseDir}` instead of guessing the install path.
 - Prefer writing a JSON file and passing `--input` over hand-building one-line shell JSON.
+- If the payload only contains `ticker/market` plus light assumptions, rely on provider-backed normalization instead of fabricating fundamentals.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 

@@ -1,0 +1,10 @@
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "provider": "yahoo",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03
+  }
+}
