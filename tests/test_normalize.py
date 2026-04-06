@@ -4,6 +4,8 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 from fp_dcf import normalize_payload
 
 
@@ -136,3 +138,91 @@ def test_normalize_payload_force_refresh_bypasses_cached_snapshot(tmp_path: Path
     assert out_first["fundamentals"]["ebit"] == 100.0
     assert out_second["fundamentals"]["ebit"] == 200.0
     assert "provider_cache_refresh:yahoo" in out_second["_prefill_diagnostics"]
+
+
+def test_yahoo_snapshot_uses_total_debt_for_capital_structure_weights(monkeypatch):
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("yfinance")
+
+    from fp_dcf.providers import yahoo
+
+    report_date = pd.Timestamp("2025-12-31")
+
+    class FakeTicker:
+        financials = pd.DataFrame(
+            {
+                report_date: {
+                    "Operating Income": 100.0,
+                    "Tax Provision": 20.0,
+                    "Income Before Tax": 100.0,
+                    "Interest Expense": 10.0,
+                }
+            }
+        )
+        balance_sheet = pd.DataFrame(
+            {
+                report_date: {
+                    "Cash And Cash Equivalents": 80.0,
+                    "Total Debt": 100.0,
+                    "Total Current Assets": 200.0,
+                    "Total Current Liabilities": 120.0,
+                    "Current Debt": 20.0,
+                    "Short Term Investments": 10.0,
+                }
+            }
+        )
+        cashflow = pd.DataFrame(
+            {
+                report_date: {
+                    "Operating Cash Flow": 120.0,
+                    "Depreciation And Amortization": 12.0,
+                    "Capital Expenditures": -18.0,
+                    "Interest Paid Supplemental Data": 9.0,
+                }
+            }
+        )
+        quarterly_financials = pd.DataFrame()
+        quarterly_balance_sheet = pd.DataFrame()
+        quarterly_cashflow = pd.DataFrame()
+        fast_info = {"shares": 10.0, "lastPrice": 10.0}
+
+        def get_shares_full(self, start=None, end=None):
+            return pd.Series([10.0], index=[report_date])
+
+        def history(self, period="1mo", interval="1d", auto_adjust=False):
+            return pd.DataFrame({"Adj Close": [10.0]}, index=[report_date])
+
+        def get_info(self):
+            return {"currency": "USD"}
+
+    monkeypatch.setattr(yahoo.yf, "Ticker", lambda symbol: FakeTicker())
+    monkeypatch.setattr(yahoo, "_fetch_riskfree_rate", lambda market: (0.04, "yahoo:^TNX"))
+    monkeypatch.setattr(yahoo, "_compute_beta", lambda symbol, benchmark: 1.1)
+
+    snapshot = yahoo.fetch_yahoo_snapshot("TEST", market="US", statement_frequency="A")
+
+    assert snapshot["fundamentals"]["net_debt"] == 20.0
+    assert snapshot["assumptions"]["equity_weight"] == pytest.approx(0.5)
+    assert snapshot["assumptions"]["debt_weight"] == pytest.approx(0.5)
+    assert snapshot["assumptions"]["capital_structure_source"] == "yahoo:market_value_using_total_debt"
+
+
+def test_yahoo_enrich_warns_when_capital_structure_falls_back_to_net_debt():
+    from fp_dcf.providers.yahoo import enrich_payload_from_yahoo
+
+    out = enrich_payload_from_yahoo(
+        {"ticker": "TEST", "market": "US"},
+        snapshot={
+            "provider": "yahoo",
+            "normalized_symbol": "TEST",
+            "fundamentals": {"net_debt": 30.0},
+            "assumptions": {
+                "equity_weight": 0.7692307692,
+                "debt_weight": 0.2307692308,
+                "capital_structure_source": "yahoo:market_value_using_net_debt_fallback",
+            },
+        },
+    )
+
+    assert out["assumptions"]["capital_structure_source"] == "yahoo:market_value_using_net_debt_fallback"
+    assert "yahoo_total_debt_unavailable_used_net_debt_for_capital_structure" in out["_prefill_warnings"]

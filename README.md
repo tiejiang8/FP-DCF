@@ -51,6 +51,8 @@ For steady-state single-stage DCF:
 - Prefer a normalized steady-state anchor.
 - Prefer `NOPAT + ROIC + reinvestment` when the required drivers are available.
 - Fall back to normalized historical `FCFF` only when the operating-driver path is incomplete.
+- `assumptions.fcff_anchor_mode` defaults to `latest` and also supports `manual`, `three_period_average`, and `reconciled_average`.
+- Yahoo-backed normalization exposes only the minimal historical series needed for those modes, using `date:value` dictionaries.
 
 ### 4. Market-Value-Aware WACC
 
@@ -260,6 +262,54 @@ You can also drive the override from the input payload:
 }
 ```
 
+## Implied Growth
+
+The main CLI can also append a structured implied-growth block without changing the core `run_valuation()` behavior.
+
+Input contract:
+
+- `payload.market_inputs.enterprise_value_market`, or
+- `payload.market_inputs.market_price` + `shares_out` + `net_debt`
+- `payload.implied_growth.model`: `one_stage` or `two_stage`
+
+One-stage example:
+
+```json
+{
+  "market_inputs": {
+    "market_price": 225.0
+  },
+  "implied_growth": {
+    "model": "one_stage"
+  }
+}
+```
+
+Two-stage example:
+
+```json
+{
+  "market_inputs": {
+    "enterprise_value_market": 3500000000000.0
+  },
+  "implied_growth": {
+    "model": "two_stage",
+    "high_growth_years": 5,
+    "stable_growth_rate": 0.03,
+    "lower_bound": 0.0,
+    "upper_bound": 0.25
+  }
+}
+```
+
+The output appends:
+
+- `market_inputs`: resolved market EV / equity value / price / shares / net debt with sources
+- `implied_growth`: structured solver output
+
+For `one_stage`, FP-DCF uses a closed-form implied growth solution. For `two_stage`, it solves the implied high-growth rate via bisection while keeping the stable growth rate fixed.
+If implied-growth is enabled but the required market inputs are incomplete, the CLI skips the implied-growth block instead of failing the main valuation run.
+
 If you need the full numeric grid in JSON, opt in from the payload:
 
 ```json
@@ -320,11 +370,23 @@ The public contract is meant to be machine-readable first. A typical response sh
   },
   "capital_structure": {
     "equity_weight": 0.92,
-    "debt_weight": 0.08
+    "debt_weight": 0.08,
+    "source": "yahoo:market_value_using_total_debt"
   },
   "fcff": {
     "anchor": 106216000000.0,
     "anchor_method": "ebiat_plus_da_minus_capex_minus_delta_nwc",
+    "selected_path": "ebiat",
+    "anchor_ebiat_path": 106216000000.0,
+    "anchor_cfo_path": null,
+    "ebiat_path_available": true,
+    "cfo_path_available": false,
+    "after_tax_interest": null,
+    "after_tax_interest_source": null,
+    "reconciliation_gap": null,
+    "reconciliation_gap_pct": null,
+    "anchor_mode": "latest",
+    "anchor_observation_count": 1,
     "delta_nwc_source": "OpNWC_delta"
   },
   "valuation": {
@@ -332,8 +394,31 @@ The public contract is meant to be machine-readable first. A typical response sh
     "equity_value": 1739801405103.2935,
     "per_share_value": 112.24525194214796
   },
+  "market_inputs": {
+    "enterprise_value_market": 3533500000000.0,
+    "enterprise_value_market_source": "derived_from_market_price_shares_out_and_net_debt",
+    "equity_value_market": 3487500000000.0,
+    "market_price": 225.0,
+    "shares_out": 15500000000.0,
+    "net_debt": 46000000000.0
+  },
+  "implied_growth": {
+    "enabled": true,
+    "model": "one_stage",
+    "solver": "closed_form",
+    "success": true,
+    "enterprise_value_market": 3533500000000.0,
+    "fcff_anchor": 106216000000.0,
+    "wacc": 0.0912624,
+    "one_stage": {
+      "growth_rate": 0.05941663866081859
+    },
+    "two_stage": null
+  },
   "diagnostics": [
     "tax_rate_paths_are_separated",
+    "fcff_path_selector_only_ebiat_available",
+    "fcff_path_selected:ebiat",
     "valuation_model_steady_state_single_stage"
   ]
 }

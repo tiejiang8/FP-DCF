@@ -7,6 +7,8 @@ user-invocable: true
 
 # FP-DCF
 
+Version: `v0.2.0`
+
 Use this skill when the task is to estimate intrinsic value from structured fundamentals and assumption inputs using a disciplined, auditable DCF workflow.
 
 ## Runtime Contract

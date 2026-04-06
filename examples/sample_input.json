@@ -5,6 +5,12 @@
   "currency": "USD",
   "statement_frequency": "A",
   "valuation_model": "steady_state_single_stage",
+  "market_inputs": {
+    "market_price": 225.0
+  },
+  "implied_growth": {
+    "model": "one_stage"
+  },
   "assumptions": {
     "effective_tax_rate": 0.187,
     "terminal_growth_rate": 0.03,

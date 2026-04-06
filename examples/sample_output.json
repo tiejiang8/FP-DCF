@@ -30,6 +30,17 @@
   "fcff": {
     "anchor": 106216000000.0,
     "anchor_method": "ebiat_plus_da_minus_capex_minus_delta_nwc",
+    "selected_path": "ebiat",
+    "anchor_ebiat_path": 106216000000.0,
+    "anchor_cfo_path": null,
+    "ebiat_path_available": true,
+    "cfo_path_available": false,
+    "after_tax_interest": null,
+    "after_tax_interest_source": null,
+    "reconciliation_gap": null,
+    "reconciliation_gap_pct": null,
+    "anchor_mode": "latest",
+    "anchor_observation_count": 1,
     "delta_nwc_source": "OpNWC_delta",
     "last_report_period": "2025-09-27"
   },
@@ -45,9 +56,43 @@
   },
   "diagnostics": [
     "tax_rate_paths_are_separated",
+    "fcff_path_selector_only_ebiat_available",
+    "fcff_path_selected:ebiat",
     "valuation_model_steady_state_single_stage"
   ],
   "warnings": [],
+  "market_inputs": {
+    "enterprise_value_market": 3533500000000.0,
+    "enterprise_value_market_source": "derived_from_market_price_shares_out_and_net_debt",
+    "equity_value_market": 3487500000000.0,
+    "market_price": 225.0,
+    "market_price_source": "market_inputs.market_price",
+    "shares_out": 15500000000.0,
+    "shares_out_source": "fundamentals.shares_out",
+    "net_debt": 46000000000.0,
+    "net_debt_source": "fundamentals.net_debt"
+  },
+  "implied_growth": {
+    "enabled": true,
+    "model": "one_stage",
+    "solver": "closed_form",
+    "success": true,
+    "enterprise_value_market": 3533500000000.0,
+    "fcff_anchor": 106216000000.0,
+    "wacc": 0.0912624,
+    "one_stage": {
+      "growth_rate": 0.05941663866081859
+    },
+    "two_stage": null,
+    "lower_bound": null,
+    "upper_bound": null,
+    "tolerance": null,
+    "iterations": null,
+    "diagnostics": [
+      "implied_growth_model:one_stage"
+    ],
+    "warnings": []
+  },
   "sensitivity": {
     "metric": "per_share_value",
     "metric_label": "Per Share Value",

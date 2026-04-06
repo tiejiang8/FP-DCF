@@ -36,8 +36,89 @@ class WACCInputs:
 class FCFFSummary:
     anchor: float | None = None
     anchor_method: str | None = None
+    selected_path: str | None = None
+    anchor_ebiat_path: float | None = None
+    anchor_cfo_path: float | None = None
+    ebiat_path_available: bool | None = None
+    cfo_path_available: bool | None = None
+    after_tax_interest: float | None = None
+    after_tax_interest_source: str | None = None
+    reconciliation_gap: float | None = None
+    reconciliation_gap_pct: float | None = None
+    anchor_mode: str | None = None
+    anchor_observation_count: int | None = None
     delta_nwc_source: str | None = None
     last_report_period: str | None = None
+
+    @property
+    def path_selected(self) -> str | None:
+        return self.selected_path
+
+    @path_selected.setter
+    def path_selected(self, value: str | None) -> None:
+        self.selected_path = value
+
+    @property
+    def ebiat_path_anchor(self) -> float | None:
+        return self.anchor_ebiat_path
+
+    @ebiat_path_anchor.setter
+    def ebiat_path_anchor(self, value: float | None) -> None:
+        self.anchor_ebiat_path = value
+
+    @property
+    def cfo_path_anchor(self) -> float | None:
+        return self.anchor_cfo_path
+
+    @cfo_path_anchor.setter
+    def cfo_path_anchor(self, value: float | None) -> None:
+        self.anchor_cfo_path = value
+
+    @property
+    def interest_adjustment_source(self) -> str | None:
+        return self.after_tax_interest_source
+
+    @interest_adjustment_source.setter
+    def interest_adjustment_source(self, value: str | None) -> None:
+        self.after_tax_interest_source = value
+
+
+@dataclass(slots=True)
+class MarketInputsSummary:
+    enterprise_value_market: float | None = None
+    enterprise_value_market_source: str | None = None
+    equity_value_market: float | None = None
+    market_price: float | None = None
+    market_price_source: str | None = None
+    shares_out: float | None = None
+    shares_out_source: str | None = None
+    net_debt: float | None = None
+    net_debt_source: str | None = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ImpliedGrowthSummary:
+    enabled: bool = False
+    model: str | None = None
+    solver: str | None = None
+    success: bool = False
+    enterprise_value_market: float | None = None
+    fcff_anchor: float | None = None
+    wacc: float | None = None
+    one_stage: dict[str, float | None] | None = None
+    two_stage: dict[str, float | int | None] | None = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    tolerance: float | None = None
+    iterations: int | None = None
+    diagnostics: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
 @dataclass(slots=True)

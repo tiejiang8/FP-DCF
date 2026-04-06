@@ -32,7 +32,24 @@ Preferred paths:
 - `EBIAT + D&A - CapEx - DeltaNWC`
 - `CFO + after-tax interest - CapEx`
 
-If both paths exist, the engine should expose which path was selected and why.
+Selection policy:
+
+- if both paths are available, prefer the `CFO` path
+- expose the selected path in structured output
+- expose `reconciliation_gap` and `reconciliation_gap_pct` when both paths are available
+
+Anchor-mode policy:
+
+- default `fcff_anchor_mode` is `latest`
+- `manual` requires an explicit `fcff_anchor`
+- `three_period_average` uses the latest available three periods from the selected path
+- `reconciled_average` uses the latest overlapping periods from both paths and averages the two path anchors
+
+Interest policy:
+
+- prefer reported cash-flow `interest_paid` when constructing the `CFO` path
+- if `interest_paid` is unavailable but `interest_expense` is available, the engine may proxy it
+- proxying `interest_expense` for `interest_paid` must emit a warning
 
 ## WACC Policy
 
@@ -46,6 +63,13 @@ The intended `WACC` contract contains:
 - marginal tax rate
 - equity weight
 - debt weight
+
+Capital-structure policy:
+
+- market-value equity should be paired with `total_debt` for debt weight when available
+- if `total_debt` is unavailable, `net_debt` may be used only as a fallback proxy
+- the chosen proxy must be recorded in `capital_structure_source`
+- fallback to `net_debt` must emit a warning
 
 The debt tax shield should use the marginal tax assumption, not the operating tax estimate used in `FCFF`.
 
@@ -94,4 +118,3 @@ The public interface should be machine-readable first and include:
 - valuation outputs
 
 Human-readable reports can be layered on top, but they should not replace the structured contract.
-

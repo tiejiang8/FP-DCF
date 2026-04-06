@@ -107,6 +107,26 @@ def _point_in_time(series):
     return s
 
 
+def _series_to_date_value_dict(series, *, limit: int = 3) -> dict[str, float]:
+    _require_deps()
+    s = pd.to_numeric(series, errors="coerce").dropna().sort_index()
+    if s.empty:
+        return {}
+    if limit > 0:
+        s = s.iloc[-limit:]
+
+    out: dict[str, float] = {}
+    for idx, value in s.items():
+        if hasattr(idx, "date"):
+            key = idx.date().isoformat()
+        else:
+            key = str(idx)
+        numeric = _coerce_float(value)
+        if numeric is not None:
+            out[key] = numeric
+    return out
+
+
 def _riskfree_ticker(market: str) -> str | None:
     market_u = str(market or "").upper()
     if market_u == "US":
@@ -298,6 +318,9 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
             _syn(bal, ["Current Debt And Capital Lease Obligation", "Current Debt"]),
         )
     )
+    reported_net_debt = _point_in_time(
+        _syn(bal, ["Net Debt", "NetDebt"])
+    )
     current_assets = _point_in_time(
         _merge_series(
             _syn(bal, ["Total Current Assets", "TotalCurrentAssets"]),
@@ -325,6 +348,18 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
     )
     interest_expense = _annualize_flow(
         _syn(inc, ["Interest Expense", "InterestExpense"]),
+        freq,
+    )
+    interest_paid = _annualize_flow(
+        _syn(
+            cfs,
+            [
+                "Interest Paid Supplemental Data",
+                "Interest Paid",
+                "Cash Interest Paid",
+                "Interest Paid On Debt",
+            ],
+        ),
         freq,
     )
 
@@ -375,7 +410,7 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
             last_price = None
 
     latest_period = None
-    for series in (ebit, da, capex, op_nwc_delta, nwc_delta, total_debt, cash):
+    for series in (ebit, da, ocf, capex, interest_paid, op_nwc_delta, nwc_delta, total_debt, cash):
         if series is not None and not series.dropna().empty:
             latest_period = series.dropna().index.max()
             break
@@ -385,27 +420,54 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
     net_debt = None
     if latest_total_debt is not None or latest_cash is not None:
         net_debt = float((latest_total_debt or 0.0) - (latest_cash or 0.0))
+    if net_debt is None:
+        net_debt = _latest_valid(reported_net_debt)
 
     latest_interest = _latest_valid(interest_expense)
+    latest_interest_paid = _latest_valid(interest_paid)
+    latest_ocf = _latest_valid(ocf)
     rd = None
     if latest_interest is not None and latest_total_debt and latest_total_debt > 0:
         rd = min(abs(latest_interest) / latest_total_debt, 0.25)
 
     equity_weight = None
     debt_weight = None
+    capital_structure_source = None
     if last_price is not None and shares_out is not None and shares_out > 0:
         market_equity = last_price * shares_out
-        debt_for_weight = max(net_debt or 0.0, 0.0)
-        total_capital = market_equity + debt_for_weight
+        debt_for_weight = None
+        if latest_total_debt is not None:
+            debt_for_weight = max(latest_total_debt, 0.0)
+            capital_structure_source = "yahoo:market_value_using_total_debt"
+        elif net_debt is not None:
+            debt_for_weight = max(net_debt, 0.0)
+            capital_structure_source = "yahoo:market_value_using_net_debt_fallback"
+
+        total_capital = market_equity + (debt_for_weight or 0.0)
         if total_capital > 0:
             equity_weight = market_equity / total_capital
-            debt_weight = debt_for_weight / total_capital
+            debt_weight = (debt_for_weight or 0.0) / total_capital
 
     delta_nwc = _latest_valid(op_nwc_delta)
     delta_nwc_source = "op_nwc_delta"
     if delta_nwc is None:
         delta_nwc = _latest_valid(nwc_delta)
         delta_nwc_source = "nwc_delta"
+    delta_nwc_history = _merge_series(op_nwc_delta, nwc_delta)
+
+    historical_series = {
+        key: value
+        for key, value in {
+            "ebit": _series_to_date_value_dict(ebit),
+            "ocf": _series_to_date_value_dict(ocf),
+            "da": _series_to_date_value_dict(da),
+            "capex": _series_to_date_value_dict(capex),
+            "delta_nwc": _series_to_date_value_dict(delta_nwc_history),
+            "interest_paid": _series_to_date_value_dict(interest_paid),
+            "interest_expense": _series_to_date_value_dict(interest_expense),
+        }.items()
+        if value
+    }
 
     currency = None
     try:
@@ -417,15 +479,18 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
     return {
         "fundamentals": {
             "ebit": _latest_valid(ebit),
+            "ocf": latest_ocf,
             "da": _latest_valid(da) or 0.0,
             "capex": _latest_valid(capex) or 0.0,
             "delta_nwc": delta_nwc,
             "delta_nwc_source": delta_nwc_source if delta_nwc is not None else None,
+            "interest_paid": latest_interest_paid,
             "interest_expense": latest_interest,
             "cash": latest_cash,
             "total_debt": latest_total_debt,
             "net_debt": net_debt,
             "shares_out": shares_out,
+            "historical_series": historical_series,
             "last_report_period": latest_period.date().isoformat() if latest_period is not None else None,
         },
         "assumptions": {
@@ -437,7 +502,7 @@ def _extract_latest_snapshot(ticker, statement_frequency: str, market: str) -> d
             "pre_tax_cost_of_debt_source": "yahoo:interest_expense_over_total_debt" if rd is not None else None,
             "equity_weight": equity_weight,
             "debt_weight": debt_weight,
-            "capital_structure_source": "yahoo:market_value" if equity_weight is not None else None,
+            "capital_structure_source": capital_structure_source if equity_weight is not None else None,
         },
         "currency": currency,
     }
@@ -528,6 +593,9 @@ def enrich_payload_from_yahoo(payload: dict, *, snapshot: dict | None = None) ->
 
     if assumptions.get("pre_tax_cost_of_debt") in (None, ""):
         prefill_warnings.append("yahoo_cost_of_debt_unavailable_engine_default_may_apply")
+
+    if assumptions.get("capital_structure_source") == "yahoo:market_value_using_net_debt_fallback":
+        prefill_warnings.append("yahoo_total_debt_unavailable_used_net_debt_for_capital_structure")
 
     prefill_diagnostics.append(f"provider_normalization:yahoo:{statement_frequency}")
     out["_prefill_warnings"] = prefill_warnings

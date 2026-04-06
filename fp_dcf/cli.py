@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .engine import run_valuation
+from .implied_growth import build_implied_growth_output
 from .normalize import normalize_payload
 from .plotting import render_wacc_terminal_growth_heatmap
 from .sensitivity import build_wacc_terminal_growth_sensitivity
@@ -222,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
             force_refresh=args.refresh_provider,
         )
         result = run_valuation(payload).to_dict()
+        implied_growth_output = build_implied_growth_output(payload, result)
+        if implied_growth_output is not None:
+            market_inputs, implied_growth = implied_growth_output
+            result["market_inputs"] = market_inputs.to_dict()
+            result["implied_growth"] = implied_growth.to_dict()
 
         sensitivity_request = _resolve_sensitivity_request(payload, args)
         if sensitivity_request is not None:

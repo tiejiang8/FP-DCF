@@ -57,6 +57,8 @@
 - 不把历史实现值直接当未来预测值
 - 优先使用规范化 `FCFF` 锚点
 - 当驱动项可用时，优先走 `NOPAT + reinvestment` 路径
+- `assumptions.fcff_anchor_mode` 默认是 `latest`，同时支持 `manual`、`three_period_average`、`reconciled_average`
+- Yahoo normalization 只暴露这些模式所需的最少量历史序列，并使用 `date:value` 字典输出
 
 ### 4. 市值口径的 WACC
 
@@ -166,6 +168,57 @@ python3 scripts/run_dcf.py \
 }
 ```
 
+## Implied Growth 反推
+
+主 CLI 现在也可以在不改变 `run_valuation()` 主流程行为的前提下，附加结构化的 implied growth 结果。
+
+输入约定：
+
+- 直接给 `payload.market_inputs.enterprise_value_market`，或
+- 给 `payload.market_inputs.market_price`，再配合 `shares_out` 与 `net_debt` 推导 EV
+- `payload.implied_growth.model` 支持 `one_stage` 和 `two_stage`
+
+单阶段示例：
+
+```json
+{
+  "market_inputs": {
+    "market_price": 225.0
+  },
+  "implied_growth": {
+    "model": "one_stage"
+  }
+}
+```
+
+两阶段示例：
+
+```json
+{
+  "market_inputs": {
+    "enterprise_value_market": 3500000000000.0
+  },
+  "implied_growth": {
+    "model": "two_stage",
+    "high_growth_years": 5,
+    "stable_growth_rate": 0.03,
+    "lower_bound": 0.0,
+    "upper_bound": 0.25
+  }
+}
+```
+
+输出会新增两个顶层块：
+
+- `market_inputs`：解析后的市场 EV / 股权市值 / 股价 / 股本 / 净债务及其来源
+- `implied_growth`：结构化求解结果
+
+其中：
+
+- `one_stage` 使用 closed-form 直接反推 implied growth
+- `two_stage` 在固定 stable growth 的前提下，用二分法反推出 implied high-growth rate
+- 如果启用了 implied growth，但缺少必要的 market inputs，CLI 会跳过 `implied_growth` 输出，而不会让主估值报错
+
 如果你需要把完整数值网格也放进 JSON，可以在 payload 里显式开启：
 
 ```json
@@ -251,8 +304,84 @@ provider 路径会在输出 `diagnostics` 中标记缓存状态，例如：
 - 税率口径与来源
 - `WACC` 输入项及来源
 - `FCFF` 锚点与锚点方法
+- FCFF 路径选择、anchor mode、reconciliation 信息
 - 企业价值、股权价值、每股价值
+- 可选的 `market_inputs` 与 `implied_growth`
 - diagnostics / warnings / degradation flags
+
+一个典型结果形状如下：
+
+```json
+{
+  "ticker": "AAPL",
+  "market": "US",
+  "valuation_model": "steady_state_single_stage",
+  "tax": {
+    "effective_tax_rate": 0.187,
+    "marginal_tax_rate": 0.21
+  },
+  "wacc_inputs": {
+    "risk_free_rate": 0.043,
+    "equity_risk_premium": 0.05,
+    "beta": 1.08,
+    "pre_tax_cost_of_debt": 0.032,
+    "wacc": 0.0912624
+  },
+  "capital_structure": {
+    "equity_weight": 0.92,
+    "debt_weight": 0.08,
+    "source": "yahoo:market_value_using_total_debt"
+  },
+  "fcff": {
+    "anchor": 106216000000.0,
+    "anchor_method": "ebiat_plus_da_minus_capex_minus_delta_nwc",
+    "selected_path": "ebiat",
+    "anchor_ebiat_path": 106216000000.0,
+    "anchor_cfo_path": null,
+    "ebiat_path_available": true,
+    "cfo_path_available": false,
+    "after_tax_interest": null,
+    "after_tax_interest_source": null,
+    "reconciliation_gap": null,
+    "reconciliation_gap_pct": null,
+    "anchor_mode": "latest",
+    "anchor_observation_count": 1,
+    "delta_nwc_source": "OpNWC_delta"
+  },
+  "valuation": {
+    "enterprise_value": 1785801405103.2935,
+    "equity_value": 1739801405103.2935,
+    "per_share_value": 112.24525194214796
+  },
+  "market_inputs": {
+    "enterprise_value_market": 3533500000000.0,
+    "enterprise_value_market_source": "derived_from_market_price_shares_out_and_net_debt",
+    "equity_value_market": 3487500000000.0,
+    "market_price": 225.0,
+    "shares_out": 15500000000.0,
+    "net_debt": 46000000000.0
+  },
+  "implied_growth": {
+    "enabled": true,
+    "model": "one_stage",
+    "solver": "closed_form",
+    "success": true,
+    "enterprise_value_market": 3533500000000.0,
+    "fcff_anchor": 106216000000.0,
+    "wacc": 0.0912624,
+    "one_stage": {
+      "growth_rate": 0.05941663866081859
+    },
+    "two_stage": null
+  },
+  "diagnostics": [
+    "tax_rate_paths_are_separated",
+    "fcff_path_selector_only_ebiat_available",
+    "fcff_path_selected:ebiat",
+    "valuation_model_steady_state_single_stage"
+  ]
+}
+```
 
 参考文件：
 
