@@ -18,10 +18,11 @@ This document defines the intended public methodology for `FP-DCF`.
 
 Use the first reliable source in this order:
 
-1. `OpNWC_delta`
-2. `NWC_delta`
-3. derived operating NWC from current assets/current liabilities, excluding non-operating cash and short-term debt when possible
-4. cash-flow fallback such as `ChangeInWorkingCapital`
+1. `delta_nwc`
+2. `OpNWC_delta`
+3. `NWC_delta`
+4. derived operating NWC from current assets/current liabilities, excluding non-operating cash and short-term debt when possible
+5. cash-flow fallback such as `ChangeInWorkingCapital`
 
 This is intentionally more conservative than hard-coding a single balance-sheet formula.
 

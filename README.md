@@ -105,10 +105,11 @@ This repository is the public-facing extraction layer for a larger Yahoo / marke
 
 The intended hierarchy is:
 
-1. `OpNWC_delta`
-2. `NWC_delta`
-3. derived operating working capital from current assets / current liabilities
-4. cash-flow statement fallback such as `ChangeInWorkingCapital`
+1. `delta_nwc`
+2. `OpNWC_delta`
+3. `NWC_delta`
+4. derived operating working capital from current assets / current liabilities
+5. cash-flow statement fallback such as `ChangeInWorkingCapital`
 
 The selected source should always be reported back to the caller.
 

@@ -105,10 +105,11 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 
 预期层级如下：
 
-1. `OpNWC_delta`
-2. `NWC_delta`
-3. 由流动资产 / 流动负债反推的经营营运资本变化
-4. 现金流量表中的 `ChangeInWorkingCapital` 一类字段
+1. `delta_nwc`
+2. `OpNWC_delta`
+3. `NWC_delta`
+4. 由流动资产 / 流动负债反推的经营营运资本变化
+5. 现金流量表中的 `ChangeInWorkingCapital` 一类字段
 
 最终选用的来源必须在输出中说明。
 

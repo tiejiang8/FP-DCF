@@ -40,4 +40,4 @@ __all__ = [
     "solve_two_stage_implied_high_growth_rate",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
