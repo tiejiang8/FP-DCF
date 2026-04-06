@@ -9,6 +9,12 @@ user-invocable: true
 
 Version: `v0.2.0`
 
+## Repository Workflow Notice
+
+- For this repository, GitHub submissions do not use a separate branch workflow.
+- Do not create a feature branch for routine updates; commit and publish on the designated branch directly unless the user explicitly asks for a different flow.
+- If a default workflow suggests opening a branch or PR, treat that as incorrect for this repository.
+
 Use this skill when the task is to estimate intrinsic value from structured fundamentals and assumption inputs using a disciplined, auditable DCF workflow.
 
 ## Runtime Contract

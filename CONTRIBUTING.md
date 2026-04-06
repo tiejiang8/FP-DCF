@@ -4,6 +4,13 @@ Thanks for contributing to `FP-DCF`.
 
 This repository is intended to become a clean, public-facing extraction of a first-principles DCF workflow for LLM agents and quantitative research use cases. The project values explicit assumptions, auditable fallbacks, and small, reviewable changes.
 
+## GitHub Submission Workflow
+
+This repository does not use a separate feature-branch workflow for normal GitHub submissions.
+
+- Do not create an extra branch for routine changes.
+- Work on the designated branch directly unless a maintainer explicitly asks for a different flow.
+
 ## Development Setup
 
 ```bash
@@ -28,11 +35,11 @@ pytest -q
 - Add or update tests when changing contracts, schemas, or valuation logic.
 - Update documentation when public behavior changes.
 
-## Pull Requests
+## GitHub Submission Checklist
 
-Before opening a PR, please make sure:
+Before pushing changes to GitHub, please make sure:
 
-- the branch is up to date with `main`
+- you are following the repository's no-extra-branch workflow
 - lint and tests pass locally
 - the README or methodology docs are updated when needed
 - new fallback behavior is explained in code or docs

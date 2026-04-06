@@ -6,6 +6,8 @@ A first-principles DCF engine for LLM agents and quantitative research workflows
 
 FP-DCF turns normalized public-company data into auditable `FCFF`, `WACC`, valuation, implied-growth, and sensitivity outputs without hiding accounting and valuation assumptions behind opaque shortcuts.
 
+> Repository workflow note: GitHub submissions for this project do not use a separate feature-branch workflow. Commit and publish on the designated branch directly unless the maintainer explicitly says otherwise.
+
 ![Sample sensitivity heatmap](./examples/sample_output.sensitivity.png)
 
 ## Quickstart
@@ -477,4 +479,4 @@ FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks, and PR expectations.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, checks, and the repository's no-extra-branch GitHub submission workflow.

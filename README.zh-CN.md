@@ -6,6 +6,8 @@
 
 FP-DCF 专注做一件事：把公开财报与市场数据转成可审计的 `FCFF`、`WACC`、估值结果、隐含增长率与敏感性分析输出，而不是把会计口径与估值假设混在一起做成一个黑盒数字。
 
+> 仓库工作流说明：本项目提交到 GitHub 时不走单独功能分支工作流。除非维护者明确说明，否则请直接在指定分支上提交和同步。
+
 ![示例敏感性热力图](./examples/sample_output.sensitivity.png)
 
 ## 快速开始
@@ -482,4 +484,4 @@ FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
 
 ## 贡献
 
-开发环境、检查方式与 PR 约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+开发环境、检查方式与本仓库“不额外创建分支”的 GitHub 提交流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
