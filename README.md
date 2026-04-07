@@ -176,6 +176,10 @@ FP-DCF `v0.3.0` supports these valuation models in the main valuation path:
 
 `three_stage` is an explicit valuation model with a high-growth stage, a linear fade stage, and a Gordon Growth terminal stage. Unknown `valuation_model` values now fail fast with an error containing `unsupported valuation_model`; FP-DCF no longer silently falls back to `steady_state_single_stage`.
 
+`two_stage` remains backward-compatible with `assumptions.high_growth_rate` / `high_growth_years` and also accepts `assumptions.stage1_growth_rate` / `stage1_years` as aliases.
+
+When `valuation_model=three_stage`, missing required stage inputs also fail fast instead of degrading into another valuation model.
+
 `three_stage` in `v0.3.0` applies only to valuation. The implied-growth solver still supports only `one_stage` and `two_stage`.
 
 Three-stage input example:

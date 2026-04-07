@@ -138,6 +138,9 @@ class ValuationSummary:
     stage2_years: int | None = None
     stage2_decay_mode: str | None = None
 
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 @dataclass(slots=True)
 class ValuationOutput:

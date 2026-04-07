@@ -91,7 +91,10 @@ def test_cli_three_stage_pretty_output_includes_requested_and_effective_models(t
     assert payload["valuation_model"] == "three_stage"
     assert payload["requested_valuation_model"] == "three_stage"
     assert payload["effective_valuation_model"] == "three_stage"
+    assert payload["degraded"] is False
     assert payload["valuation"]["present_value_stage2"] is not None
+    assert payload["valuation"]["terminal_value"] is not None
+    assert payload["valuation"]["explicit_forecast_years"] == 5
 
 
 def test_cli_unsupported_valuation_model_returns_non_zero(tmp_path: Path, monkeypatch, capsys):

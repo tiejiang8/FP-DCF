@@ -479,6 +479,42 @@ def test_run_valuation_two_stage_clamps_stable_growth_when_needed():
     assert "stable_growth_rate_clamped_below_wacc" in out.warnings
 
 
+def test_run_valuation_two_stage_accepts_stage1_aliases():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "two_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.7,
+            "debt_weight": 0.3,
+            "terminal_growth_rate": 0.03,
+            "stage1_growth_rate": 0.12,
+            "stage1_years": 3,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 0.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert out.valuation_model == "two_stage"
+    assert out.requested_valuation_model == "two_stage"
+    assert out.effective_valuation_model == "two_stage"
+    assert out.valuation.present_value_stage1 is not None
+    assert out.valuation.present_value_terminal is not None
+    assert out.valuation.explicit_forecast_years == 3
+    assert "valuation_model_two_stage" in out.diagnostics
+
+
 def test_run_valuation_preserves_provider_sources():
     payload = {
         "ticker": "TEST",

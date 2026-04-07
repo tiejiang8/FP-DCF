@@ -11,6 +11,9 @@ def test_valuation_output_defaults_are_stable():
     assert result.ticker == "AAPL"
     assert result.market == "US"
     assert result.valuation_model == "steady_state_single_stage"
+    assert result.requested_valuation_model is None
+    assert result.effective_valuation_model is None
+    assert result.degraded is False
     assert result.tax.effective_tax_rate is None
     assert result.wacc_inputs.wacc is None
     assert result.capital_structure.equity_weight is None

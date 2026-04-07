@@ -57,11 +57,11 @@ def _coerce_positive_int(value, *, field_name: str) -> int:
     return int(numeric)
 
 
-def _validate_valuation_model(raw_value) -> tuple[str, str]:
-    requested_model = str(raw_value or "steady_state_single_stage").strip() or "steady_state_single_stage"
-    if requested_model not in _SUPPORTED_VALUATION_MODELS:
-        raise ValueError(f"unsupported valuation_model: {requested_model}")
-    return requested_model, requested_model
+def _validate_valuation_model(model: str) -> str:
+    normalized_model = str(model or "steady_state_single_stage").strip() or "steady_state_single_stage"
+    if normalized_model not in _SUPPORTED_VALUATION_MODELS:
+        raise ValueError(f"unsupported valuation_model: {normalized_model}")
+    return normalized_model
 
 
 def _resolve_rate_input(
@@ -103,6 +103,31 @@ def _clamp_growth_below_wacc(
         return growth_rate
     _append_once(warnings, warning_key)
     return max(0.0, wacc - 0.01)
+
+
+def _resolve_two_stage_inputs(
+    assumptions: dict,
+    warnings: list[str],
+) -> tuple[float, int]:
+    growth_rate_high = _clip_rate(
+        _coerce_float(assumptions.get("high_growth_rate")),
+        low=-0.5,
+        high=1.0,
+    )
+    if growth_rate_high is None:
+        growth_rate_high = _clip_rate(
+            _coerce_float(assumptions.get("stage1_growth_rate")),
+            low=-0.5,
+            high=1.0,
+        )
+    if growth_rate_high is None:
+        growth_rate_high = 0.10
+        warnings.append("high_growth_rate_missing_defaulted_to_0.10")
+
+    years_high = _coerce_float(assumptions.get("high_growth_years"))
+    if years_high is None:
+        years_high = _coerce_float(assumptions.get("stage1_years"))
+    return growth_rate_high, int(years_high or 5)
 
 
 def _normalize_weights(
@@ -862,9 +887,8 @@ def run_valuation(payload: dict) -> ValuationOutput:
     assumptions = payload.get("assumptions") or {}
     warnings: list[str] = list(payload.get("_prefill_warnings", []))
     diagnostics: list[str] = list(payload.get("_prefill_diagnostics", []))
-    requested_valuation_model, effective_valuation_model = _validate_valuation_model(
-        payload.get("valuation_model")
-    )
+    requested_valuation_model = str(payload.get("valuation_model") or "steady_state_single_stage")
+    effective_valuation_model = _validate_valuation_model(requested_valuation_model)
 
     tax = _resolve_tax_inputs(payload, warnings, diagnostics)
     fcff = _compute_fcff_anchor(fundamentals, assumptions, tax, warnings, diagnostics)
@@ -913,15 +937,7 @@ def run_valuation(payload: dict) -> ValuationOutput:
             missing_warning="terminal_growth_rate_missing_defaulted_to_0.03",
             clip_warning="terminal_growth_rate_clipped_to_supported_range",
         )
-        growth_rate_high = _clip_rate(
-            _coerce_float(assumptions.get("high_growth_rate")),
-            low=-0.5,
-            high=1.0,
-        )
-        if growth_rate_high is None:
-            growth_rate_high = 0.10
-            warnings.append("high_growth_rate_missing_defaulted_to_0.10")
-        years_high = int(_coerce_float(assumptions.get("high_growth_years")) or 5)
+        growth_rate_high, years_high = _resolve_two_stage_inputs(assumptions, warnings)
         valuation = _two_stage_valuation(
             fcff_anchor=fcff.anchor,
             wacc=wacc_inputs.wacc,
@@ -1004,6 +1020,7 @@ def run_valuation(payload: dict) -> ValuationOutput:
         valuation_model=effective_valuation_model,
         requested_valuation_model=requested_valuation_model,
         effective_valuation_model=effective_valuation_model,
+        degraded=False,
         tax=tax,
         wacc_inputs=wacc_inputs,
         capital_structure=capital_structure,

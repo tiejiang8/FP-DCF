@@ -35,6 +35,11 @@ def _has_value(value) -> bool:
     return value not in (None, "")
 
 
+def _emit_error(exc: Exception) -> int:
+    sys.stderr.write(f"fp-dcf error: {exc}\n")
+    return 2
+
+
 def _default_chart_path(args: argparse.Namespace, payload: dict, result: dict) -> Path:
     if args.output != "-":
         output_path = Path(args.output).expanduser()
@@ -288,8 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             Path(args.output).write_text(text + "\n", encoding="utf-8")
     except Exception as exc:  # pragma: no cover - exercised via CLI smoke test
-        sys.stderr.write(f"fp-dcf error: {exc}\n")
-        return 2
+        return _emit_error(exc)
 
     return 0
 

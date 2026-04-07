@@ -90,6 +90,8 @@ Supported `valuation_model` values in `v0.3.0`:
 - `two_stage`
 - `three_stage`
 
+For `two_stage`, the engine continues to support the legacy `assumptions.high_growth_rate` / `high_growth_years` fields and also accepts `assumptions.stage1_growth_rate` / `stage1_years` as compatible aliases.
+
 For `three_stage`, the valuation path requires these assumption fields:
 
 - `assumptions.terminal_growth_rate`
@@ -234,6 +236,7 @@ Always return:
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
 - If `valuation_model=three_stage` is missing `stage1_growth_rate`, `stage1_years`, `stage2_end_growth_rate`, `stage2_years`, or `terminal_growth_rate`, fail with a clear error instead of falling back.
 - If `valuation_model` is unknown, fail with an error containing `unsupported valuation_model`; do not silently remap it to another model.
+- Do not silently degrade a requested `three_stage` valuation into `two_stage` or `steady_state_single_stage`.
 - Keep implied-growth scope unchanged in `v0.3.0`: only `one_stage` and `two_stage` are valid there.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 
