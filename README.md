@@ -8,7 +8,11 @@ FP-DCF turns normalized public-company data into auditable `FCFF`, `WACC`, valua
 
 > Repository workflow note: GitHub submissions for this project do not use a separate feature-branch workflow. Commit and publish on the designated branch directly unless the maintainer explicitly says otherwise.
 
-![Sample sensitivity heatmap](./examples/sample_output.sensitivity.png)
+Representative market-implied sensitivity heatmaps:
+
+| Apple two-stage | NVIDIA three-stage |
+| --- | --- |
+| ![Apple two-stage market-implied sensitivity heatmap](./examples/AAPL_two_stage_manual_fundamentals_market_implied.output.sensitivity.png) | ![NVIDIA three-stage market-implied sensitivity heatmap](./examples/NVDA_three_stage_manual_fundamentals_market_implied.output.sensitivity.png) |
 
 ## Quickstart
 
@@ -49,7 +53,8 @@ Unlike many open-source DCF scripts, FP-DCF:
 ## What you get
 
 * structured valuation JSON for `steady_state_single_stage`, `two_stage`, and `three_stage`
-* implied growth (`one_stage` / `two_stage` only; `three_stage` is not supported for the implied-growth solver in `v0.3.0`)
+* implied growth (`one_stage` / `two_stage` only; the existing `implied_growth` block still does not support `three_stage`)
+* `market_implied_stage1_growth` backsolve for `two_stage` and `three_stage`
 * `WACC x Terminal Growth` sensitivity heatmaps
 * Yahoo-backed normalization with local cache
 * machine-readable diagnostics for downstream tools
@@ -80,8 +85,45 @@ See also:
 * [sample_output.json](./examples/sample_output.json)
 * [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
 * [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
+* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
+* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
+* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
+* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
+* [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
+* [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
+* [cn_moutai_single_stage.output.json](./examples/cn_moutai_single_stage.output.json)
+* [AAPL_two_stage_manual_fundamentals_market_implied.json](./examples/AAPL_two_stage_manual_fundamentals_market_implied.json)
+* [AAPL_two_stage_provider_market_implied.json](./examples/AAPL_two_stage_provider_market_implied.json)
+* [NVDA_three_stage_manual_fundamentals_market_implied.json](./examples/NVDA_three_stage_manual_fundamentals_market_implied.json)
+* [NVDA_three_stage_provider_market_implied.json](./examples/NVDA_three_stage_provider_market_implied.json)
 * [Methodology](./references/methodology.md)
 * [简体中文](./README.zh-CN.md)
+
+## Regional samples
+
+Tencent two-stage sample:
+
+* input: [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
+* output: [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
+* heatmap PNG: [cn_tencent_two_stage.output.sensitivity.png](./examples/cn_tencent_two_stage.output.sensitivity.png)
+
+![Tencent two-stage sensitivity heatmap](./examples/cn_tencent_two_stage.output.sensitivity.png)
+
+Kweichow Moutai steady-state single-stage sample:
+
+* input: [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
+* output: [cn_moutai_single_stage.output.json](./examples/cn_moutai_single_stage.output.json)
+* heatmap PNG: [cn_moutai_single_stage.output.sensitivity.png](./examples/cn_moutai_single_stage.output.sensitivity.png)
+
+![Kweichow Moutai single-stage sensitivity heatmap](./examples/cn_moutai_single_stage.output.sensitivity.png)
+
+AAPL / NVDA market-implied input samples. The hero heatmaps above use the `manual_fundamentals` runs:
+
+* Apple two-stage, manual fundamentals: [AAPL_two_stage_manual_fundamentals_market_implied.json](./examples/AAPL_two_stage_manual_fundamentals_market_implied.json)
+* Apple two-stage, provider fundamentals: [AAPL_two_stage_provider_market_implied.json](./examples/AAPL_two_stage_provider_market_implied.json)
+* NVIDIA three-stage, manual fundamentals: [NVDA_three_stage_manual_fundamentals_market_implied.json](./examples/NVDA_three_stage_manual_fundamentals_market_implied.json)
+* NVIDIA three-stage, provider fundamentals: [NVDA_three_stage_provider_market_implied.json](./examples/NVDA_three_stage_provider_market_implied.json)
 
 ## Positioning
 
@@ -180,7 +222,7 @@ FP-DCF `v0.3.0` supports these valuation models in the main valuation path:
 
 When `valuation_model=three_stage`, missing required stage inputs also fail fast instead of degrading into another valuation model.
 
-`three_stage` in `v0.3.0` applies only to valuation. The implied-growth solver still supports only `one_stage` and `two_stage`.
+`three_stage` in `v0.3.0` applies to the main valuation path and to the separate `market_implied_stage1_growth` backsolve. The existing `implied_growth` solver still supports only `one_stage` and `two_stage`.
 
 Three-stage input example:
 
@@ -353,6 +395,118 @@ The output appends:
 For `one_stage`, FP-DCF uses a closed-form implied growth solution. For `two_stage`, it solves the implied high-growth rate via bisection while keeping the stable growth rate fixed.
 
 If implied growth is enabled but the required market inputs are incomplete, the CLI skips the implied-growth block instead of failing the main valuation run.
+
+Single-stage market-implied growth should continue to use `payload.implied_growth.model=one_stage`. Do not try to force `steady_state_single_stage` through `market_implied_stage1_growth`; that block is reserved for explicit stage-1 backsolves.
+
+## Market-implied stage1 growth
+
+`market_implied_stage1_growth` is a separate output block from `implied_growth`.
+
+It answers one specific question:
+
+* holding the base-case `FCFF` anchor, `WACC`, terminal growth, stage lengths, capital structure, `shares_out`, and `net_debt` fixed
+* what `stage1_growth_rate` would make the DCF match the market price or market EV?
+
+This is a single-variable interpretation layer. It does not auto-rewrite the payload assumptions and it is not a multi-parameter calibration step.
+
+Supported scope:
+
+* `valuation_model=two_stage`
+* `valuation_model=three_stage`
+
+Not supported:
+
+* `valuation_model=steady_state_single_stage`
+
+If you enable it on `steady_state_single_stage`, FP-DCF fails fast with:
+
+* `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`
+
+Minimal two-stage input:
+
+```json
+{
+  "valuation_model": "two_stage",
+  "market_inputs": {
+    "market_price": 582.5849079694428
+  },
+  "market_implied_stage1_growth": {
+    "enabled": true,
+    "lower_bound": 0.0,
+    "upper_bound": 0.4
+  },
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.1,
+    "stage1_years": 4
+  },
+  "fundamentals": {
+    "fcff_anchor": 100.0,
+    "shares_out": 10.0,
+    "net_debt": 20.0
+  }
+}
+```
+
+Minimal three-stage input:
+
+```json
+{
+  "valuation_model": "three_stage",
+  "market_inputs": {
+    "market_price": 491.243930259804
+  },
+  "market_implied_stage1_growth": {
+    "enabled": true
+  },
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.12,
+    "stage1_years": 3,
+    "stage2_end_growth_rate": 0.06,
+    "stage2_years": 2,
+    "stage2_decay_mode": "linear"
+  },
+  "fundamentals": {
+    "fcff_anchor": 100.0,
+    "shares_out": 10.0,
+    "net_debt": 0.0
+  }
+}
+```
+
+Output excerpt:
+
+```json
+{
+  "market_implied_stage1_growth": {
+    "enabled": true,
+    "success": true,
+    "valuation_model": "two_stage",
+    "solver": "bisection",
+    "target_metric": "per_share_value",
+    "market_price": 582.5849079694428,
+    "enterprise_value_market": 5845.849079694428,
+    "base_case_value": 506.5955721473416,
+    "base_input_value": 0.1,
+    "solved_value": 0.14021034240722655,
+    "absolute_offset": 0.04021034240722654,
+    "relative_offset_pct": 40.21034240722654,
+    "lower_bound": 0.0,
+    "upper_bound": 0.4,
+    "iterations": 20,
+    "residual": 0.00035705652669548726,
+    "interpretation": "The market is pricing a stronger explicit-growth phase than the base case."
+  }
+}
+```
+
+Examples:
+
+* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
+* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
+* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
+* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
 
 ## Provider cache
 

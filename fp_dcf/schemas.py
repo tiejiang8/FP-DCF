@@ -122,6 +122,30 @@ class ImpliedGrowthSummary:
 
 
 @dataclass(slots=True)
+class MarketImpliedStage1GrowthSummary:
+    enabled: bool = False
+    success: bool = False
+    valuation_model: str | None = None
+    solver: str | None = None
+    target_metric: str | None = None
+    market_price: float | None = None
+    enterprise_value_market: float | None = None
+    base_case_value: float | None = None
+    base_input_value: float | None = None
+    solved_value: float | None = None
+    absolute_offset: float | None = None
+    relative_offset_pct: float | None = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    iterations: int | None = None
+    residual: float | None = None
+    interpretation: str | None = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ValuationSummary:
     enterprise_value: float | None = None
     equity_value: float | None = None
@@ -157,11 +181,15 @@ class ValuationOutput:
     capital_structure: CapitalStructure = field(default_factory=CapitalStructure)
     fcff: FCFFSummary = field(default_factory=FCFFSummary)
     valuation: ValuationSummary = field(default_factory=ValuationSummary)
+    market_implied_stage1_growth: MarketImpliedStage1GrowthSummary | None = None
     diagnostics: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        if payload.get("market_implied_stage1_growth") is None:
+            payload.pop("market_implied_stage1_growth", None)
+        return payload
 
 
 @dataclass(slots=True)

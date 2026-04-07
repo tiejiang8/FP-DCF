@@ -35,6 +35,34 @@ def _three_stage_payload(**assumption_overrides):
     }
 
 
+def _two_stage_payload(**assumption_overrides):
+    assumptions = {
+        "effective_tax_rate": 0.21,
+        "marginal_tax_rate": 0.21,
+        "risk_free_rate": 0.03,
+        "equity_risk_premium": 0.04,
+        "beta": 1.0,
+        "pre_tax_cost_of_debt": 0.03,
+        "equity_weight": 0.7,
+        "debt_weight": 0.3,
+        "terminal_growth_rate": 0.03,
+        "stage1_growth_rate": 0.10,
+        "stage1_years": 4,
+    }
+    assumptions.update(assumption_overrides)
+    return {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "two_stage",
+        "assumptions": assumptions,
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 20.0,
+        },
+    }
+
+
 def test_run_valuation_single_stage_from_fundamentals():
     payload = {
         "ticker": "TEST",
@@ -672,3 +700,162 @@ def test_run_valuation_unknown_model_errors():
 
     with pytest.raises(ValueError, match="unsupported valuation_model"):
         run_valuation(payload)
+
+
+def test_market_implied_stage1_growth_two_stage_success():
+    payload = _two_stage_payload()
+    base_case = run_valuation(payload)
+    assert base_case.valuation.per_share_value is not None
+
+    payload["market_inputs"] = {
+        "market_price": float(base_case.valuation.per_share_value) * 1.20,
+    }
+    payload["market_implied_stage1_growth"] = {"enabled": True}
+
+    out = run_valuation(payload)
+
+    assert out.market_implied_stage1_growth is not None
+    assert out.market_implied_stage1_growth.success is True
+    assert out.market_implied_stage1_growth.valuation_model == "two_stage"
+    assert out.market_implied_stage1_growth.target_metric == "per_share_value"
+    assert out.market_implied_stage1_growth.solved_value is not None
+    assert out.market_implied_stage1_growth.base_input_value == pytest.approx(0.10)
+    assert out.market_implied_stage1_growth.solved_value != pytest.approx(
+        out.market_implied_stage1_growth.base_input_value
+    )
+    assert out.market_implied_stage1_growth.solved_value > out.market_implied_stage1_growth.base_input_value
+
+
+def test_market_implied_stage1_growth_three_stage_success():
+    payload = _three_stage_payload()
+    base_case = run_valuation(payload)
+    assert base_case.valuation.per_share_value is not None
+
+    payload["market_inputs"] = {
+        "market_price": float(base_case.valuation.per_share_value) * 0.90,
+    }
+    payload["market_implied_stage1_growth"] = {"enabled": True}
+
+    out = run_valuation(payload)
+
+    assert out.market_implied_stage1_growth is not None
+    assert out.market_implied_stage1_growth.success is True
+    assert out.market_implied_stage1_growth.valuation_model == "three_stage"
+    assert out.market_implied_stage1_growth.target_metric == "per_share_value"
+    assert out.market_implied_stage1_growth.solved_value is not None
+
+
+def test_market_implied_stage1_growth_rejects_single_stage():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.7,
+            "debt_weight": 0.3,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 0.0,
+        },
+        "market_inputs": {
+            "market_price": 100.0,
+        },
+        "market_implied_stage1_growth": {
+            "enabled": True,
+        },
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="market_implied_stage1_growth requires valuation_model in \\{two_stage, three_stage\\}",
+    ):
+        run_valuation(payload)
+
+
+def test_market_implied_stage1_growth_unbracketed_bounds_returns_failure():
+    payload = _two_stage_payload()
+    base_case = run_valuation(payload)
+    assert base_case.valuation.per_share_value is not None
+
+    payload["market_inputs"] = {
+        "market_price": float(base_case.valuation.per_share_value) * 2.0,
+    }
+    payload["market_implied_stage1_growth"] = {
+        "enabled": True,
+        "lower_bound": 0.00,
+        "upper_bound": 0.05,
+    }
+
+    out = run_valuation(payload)
+
+    assert out.market_implied_stage1_growth is not None
+    assert out.market_implied_stage1_growth.success is False
+    assert out.market_implied_stage1_growth.solved_value is None
+    assert (
+        out.market_implied_stage1_growth.interpretation
+        == "The market price cannot be matched within the configured stage1_growth_rate search bounds."
+    )
+    assert "market_implied_stage1_growth_bounds_do_not_bracket_root" in out.warnings
+
+
+def test_market_implied_stage1_growth_uses_fixed_other_parameters():
+    payload = _three_stage_payload()
+    base_case = run_valuation(payload)
+    assert base_case.valuation.per_share_value is not None
+
+    original_stage2_end_growth_rate = payload["assumptions"]["stage2_end_growth_rate"]
+    original_stage2_years = payload["assumptions"]["stage2_years"]
+    original_terminal_growth_rate = payload["assumptions"]["terminal_growth_rate"]
+
+    payload["market_inputs"] = {
+        "market_price": float(base_case.valuation.per_share_value) * 1.10,
+    }
+    payload["market_implied_stage1_growth"] = {"enabled": True}
+
+    out = run_valuation(payload)
+
+    assert out.market_implied_stage1_growth is not None
+    assert out.market_implied_stage1_growth.success is True
+    assert payload["assumptions"]["stage2_end_growth_rate"] == pytest.approx(original_stage2_end_growth_rate)
+    assert payload["assumptions"]["stage2_years"] == original_stage2_years
+    assert payload["assumptions"]["terminal_growth_rate"] == pytest.approx(original_terminal_growth_rate)
+    assert out.valuation.stage2_years == original_stage2_years
+    assert out.valuation.terminal_growth_rate == pytest.approx(original_terminal_growth_rate)
+
+
+def test_market_implied_stage1_growth_relative_offset_sign():
+    payload_high = _two_stage_payload()
+    base_case_high = run_valuation(payload_high)
+    assert base_case_high.valuation.per_share_value is not None
+    payload_high["market_inputs"] = {
+        "market_price": float(base_case_high.valuation.per_share_value) * 1.10,
+    }
+    payload_high["market_implied_stage1_growth"] = {"enabled": True}
+
+    out_high = run_valuation(payload_high)
+
+    payload_low = _two_stage_payload()
+    base_case_low = run_valuation(payload_low)
+    assert base_case_low.valuation.per_share_value is not None
+    payload_low["market_inputs"] = {
+        "market_price": float(base_case_low.valuation.per_share_value) * 0.90,
+    }
+    payload_low["market_implied_stage1_growth"] = {"enabled": True}
+
+    out_low = run_valuation(payload_low)
+
+    assert out_high.market_implied_stage1_growth is not None
+    assert out_low.market_implied_stage1_growth is not None
+    assert out_high.market_implied_stage1_growth.relative_offset_pct is not None
+    assert out_low.market_implied_stage1_growth.relative_offset_pct is not None
+    assert out_high.market_implied_stage1_growth.relative_offset_pct > 0
+    assert out_low.market_implied_stage1_growth.relative_offset_pct < 0

@@ -8,7 +8,11 @@ FP-DCF 专注做一件事：把公开财报与市场数据转成可审计的 `FC
 
 > 仓库工作流说明：本项目提交到 GitHub 时不走单独功能分支工作流。除非维护者明确说明，否则请直接在指定分支上提交和同步。
 
-![示例敏感性热力图](./examples/sample_output.sensitivity.png)
+代表性的市场隐含敏感性热力图：
+
+| Apple 两阶段 | NVIDIA 三阶段 |
+| --- | --- |
+| ![Apple two-stage market-implied sensitivity heatmap](./examples/AAPL_two_stage_manual_fundamentals_market_implied.output.sensitivity.png) | ![NVIDIA three-stage market-implied sensitivity heatmap](./examples/NVDA_three_stage_manual_fundamentals_market_implied.output.sensitivity.png) |
 
 ## 快速开始
 
@@ -49,7 +53,8 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 ## 你会得到什么
 
 * 支持 `steady_state_single_stage`、`two_stage`、`three_stage` 的结构化估值 JSON
-* `one_stage` / `two_stage` implied growth；`v0.3.0` 的 `three_stage` 仅针对 valuation，不支持隐含增长求解
+* `one_stage` / `two_stage` implied growth；现有 `implied_growth` block 仍不支持 `three_stage`
+* 支持 `two_stage` / `three_stage` 的独立 `market_implied_stage1_growth` 反推块
 * `WACC x Terminal Growth` 敏感性热力图
 * 带本地缓存的 Yahoo normalization
 * 适合下游工具消费的 machine-readable diagnostics
@@ -80,8 +85,45 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 * [sample_output.json](./examples/sample_output.json)
 * [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
 * [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
+* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
+* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
+* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
+* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
+* [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
+* [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
+* [cn_moutai_single_stage.output.json](./examples/cn_moutai_single_stage.output.json)
+* [AAPL_two_stage_manual_fundamentals_market_implied.json](./examples/AAPL_two_stage_manual_fundamentals_market_implied.json)
+* [AAPL_two_stage_provider_market_implied.json](./examples/AAPL_two_stage_provider_market_implied.json)
+* [NVDA_three_stage_manual_fundamentals_market_implied.json](./examples/NVDA_three_stage_manual_fundamentals_market_implied.json)
+* [NVDA_three_stage_provider_market_implied.json](./examples/NVDA_three_stage_provider_market_implied.json)
 * [方法论文档](./references/methodology.md)
 * [English](./README.md)
+
+## 区域样例
+
+腾讯两阶段样例：
+
+* 输入：[cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
+* 输出：[cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
+* 热力图 PNG：[cn_tencent_two_stage.output.sensitivity.png](./examples/cn_tencent_two_stage.output.sensitivity.png)
+
+![Tencent two-stage sensitivity heatmap](./examples/cn_tencent_two_stage.output.sensitivity.png)
+
+贵州茅台单阶段样例：
+
+* 输入：[cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
+* 输出：[cn_moutai_single_stage.output.json](./examples/cn_moutai_single_stage.output.json)
+* 热力图 PNG：[cn_moutai_single_stage.output.sensitivity.png](./examples/cn_moutai_single_stage.output.sensitivity.png)
+
+![Kweichow Moutai single-stage sensitivity heatmap](./examples/cn_moutai_single_stage.output.sensitivity.png)
+
+AAPL / NVDA 市场隐含输入样例。上面的首图使用的是 `manual_fundamentals` 版本：
+
+* Apple 两阶段，手工 fundamentals：[AAPL_two_stage_manual_fundamentals_market_implied.json](./examples/AAPL_two_stage_manual_fundamentals_market_implied.json)
+* Apple 两阶段，provider fundamentals：[AAPL_two_stage_provider_market_implied.json](./examples/AAPL_two_stage_provider_market_implied.json)
+* NVIDIA 三阶段，手工 fundamentals：[NVDA_three_stage_manual_fundamentals_market_implied.json](./examples/NVDA_three_stage_manual_fundamentals_market_implied.json)
+* NVIDIA 三阶段，provider fundamentals：[NVDA_three_stage_provider_market_implied.json](./examples/NVDA_three_stage_provider_market_implied.json)
 
 ## 项目定位
 
@@ -176,7 +218,7 @@ FP-DCF `v0.3.0` 在主估值链中支持以下 `valuation_model`：
 
 其中 `three_stage` 是真正的三阶段估值：高增长期、收敛期、终值期。对未知 `valuation_model`，FP-DCF 现在会直接报错，并在错误信息中包含 `unsupported valuation_model`；不再静默回退到 `steady_state_single_stage`。
 
-`v0.3.0` 的 `three_stage` 只针对 valuation。隐含增长求解器仍只支持 `one_stage` 与 `two_stage`。
+`v0.3.0` 的 `three_stage` 现在既支持主估值，也支持独立的 `market_implied_stage1_growth` 反推；现有 `implied_growth` 求解器仍只支持 `one_stage` 与 `two_stage`。
 
 三阶段输入示例：
 
@@ -351,6 +393,118 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity -
 * `one_stage` 使用 closed-form 直接反推 implied growth
 * `two_stage` 在固定 stable growth 的前提下，使用二分法反推 implied high-growth rate
 * 如果启用了 implied growth，但 market inputs 不完整，CLI 会跳过 implied-growth 输出，而不会让主估值失败
+
+single-stage 的市场隐含增长仍应走 `payload.implied_growth.model=one_stage`，不要把 `steady_state_single_stage` 强行塞进 `market_implied_stage1_growth`。
+
+## 市场隐含 stage1 增长率
+
+`market_implied_stage1_growth` 是一个独立于 `implied_growth` 的输出块。
+
+它只回答一个问题：
+
+* 在 base-case 的 `FCFF` anchor、`WACC`、terminal growth、阶段年数、capital structure、`shares_out`、`net_debt` 都不变时
+* 市场价格或市场 EV 等价于多高的 `stage1_growth_rate`
+
+这是单变量解释层，不会自动改写 payload assumptions，也不是多参数联动校准。
+
+支持范围：
+
+* `valuation_model=two_stage`
+* `valuation_model=three_stage`
+
+不支持：
+
+* `valuation_model=steady_state_single_stage`
+
+如果在 `steady_state_single_stage` 上启用它，FP-DCF 会直接报错：
+
+* `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`
+
+两阶段最小输入：
+
+```json
+{
+  "valuation_model": "two_stage",
+  "market_inputs": {
+    "market_price": 582.5849079694428
+  },
+  "market_implied_stage1_growth": {
+    "enabled": true,
+    "lower_bound": 0.0,
+    "upper_bound": 0.4
+  },
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.1,
+    "stage1_years": 4
+  },
+  "fundamentals": {
+    "fcff_anchor": 100.0,
+    "shares_out": 10.0,
+    "net_debt": 20.0
+  }
+}
+```
+
+三阶段最小输入：
+
+```json
+{
+  "valuation_model": "three_stage",
+  "market_inputs": {
+    "market_price": 491.243930259804
+  },
+  "market_implied_stage1_growth": {
+    "enabled": true
+  },
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.12,
+    "stage1_years": 3,
+    "stage2_end_growth_rate": 0.06,
+    "stage2_years": 2,
+    "stage2_decay_mode": "linear"
+  },
+  "fundamentals": {
+    "fcff_anchor": 100.0,
+    "shares_out": 10.0,
+    "net_debt": 0.0
+  }
+}
+```
+
+输出片段：
+
+```json
+{
+  "market_implied_stage1_growth": {
+    "enabled": true,
+    "success": true,
+    "valuation_model": "two_stage",
+    "solver": "bisection",
+    "target_metric": "per_share_value",
+    "market_price": 582.5849079694428,
+    "enterprise_value_market": 5845.849079694428,
+    "base_case_value": 506.5955721473416,
+    "base_input_value": 0.1,
+    "solved_value": 0.14021034240722655,
+    "absolute_offset": 0.04021034240722654,
+    "relative_offset_pct": 40.21034240722654,
+    "lower_bound": 0.0,
+    "upper_bound": 0.4,
+    "iterations": 20,
+    "residual": 0.00035705652669548726,
+    "interpretation": "The market is pricing a stronger explicit-growth phase than the base case."
+  }
+}
+```
+
+示例：
+
+* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
+* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
+* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
+* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
 
 ## Provider 缓存
 

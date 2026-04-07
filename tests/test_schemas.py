@@ -1,4 +1,9 @@
-from fp_dcf import SensitivityHeatmapOutput, ValuationOutput, ValuationSummary
+from fp_dcf import (
+    MarketImpliedStage1GrowthSummary,
+    SensitivityHeatmapOutput,
+    ValuationOutput,
+    ValuationSummary,
+)
 
 
 def test_valuation_output_defaults_are_stable():
@@ -126,3 +131,68 @@ def test_valuation_output_serializes_requested_and_effective_models():
     assert payload["valuation"]["present_value_stage2"] == 12.0
     assert payload["valuation"]["terminal_value"] == 34.0
     assert payload["valuation"]["explicit_forecast_years"] == 5
+
+
+def test_market_implied_stage1_growth_summary_serializes_fields():
+    summary = MarketImpliedStage1GrowthSummary(
+        enabled=True,
+        success=True,
+        valuation_model="two_stage",
+        solver="bisection",
+        target_metric="per_share_value",
+        market_price=258.86,
+        enterprise_value_market=3867000000000.0,
+        base_case_value=150.85,
+        base_input_value=0.09,
+        solved_value=0.1362,
+        absolute_offset=0.0462,
+        relative_offset_pct=51.33,
+        lower_bound=0.0,
+        upper_bound=0.4,
+        iterations=37,
+        residual=0.000001,
+        interpretation="The market is pricing a stronger explicit-growth phase than the base case.",
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["enabled"] is True
+    assert payload["success"] is True
+    assert payload["valuation_model"] == "two_stage"
+    assert payload["solver"] == "bisection"
+    assert payload["target_metric"] == "per_share_value"
+    assert payload["solved_value"] == 0.1362
+    assert payload["relative_offset_pct"] == 51.33
+
+
+def test_valuation_output_serializes_market_implied_stage1_growth_block():
+    result = ValuationOutput(
+        ticker="AAPL",
+        market="US",
+        valuation_model="two_stage",
+        market_implied_stage1_growth=MarketImpliedStage1GrowthSummary(
+            enabled=True,
+            success=True,
+            valuation_model="two_stage",
+            solver="bisection",
+            target_metric="per_share_value",
+            market_price=123.0,
+            enterprise_value_market=1000.0,
+            base_case_value=100.0,
+            base_input_value=0.10,
+            solved_value=0.12,
+            absolute_offset=0.02,
+            relative_offset_pct=20.0,
+            lower_bound=-0.2,
+            upper_bound=0.5,
+            iterations=12,
+            residual=0.0,
+            interpretation="The market is pricing a stronger explicit-growth phase than the base case.",
+        ),
+    )
+
+    payload = result.to_dict()
+
+    assert "market_implied_stage1_growth" in payload
+    assert payload["market_implied_stage1_growth"]["enabled"] is True
+    assert payload["market_implied_stage1_growth"]["solver"] == "bisection"

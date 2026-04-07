@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import date
 from math import isfinite
 
+from .implied_growth import resolve_market_inputs
 from .schemas import (
     CapitalStructure,
     FCFFSummary,
+    MarketImpliedStage1GrowthSummary,
     TaxAssumptions,
     ValuationOutput,
     ValuationSummary,
@@ -27,6 +29,16 @@ def _coerce_float(value) -> float | None:
     except (TypeError, ValueError):
         return None
     return out if isfinite(out) else None
+
+
+def _coerce_bool(value, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _append_once(items: list[str], item: str) -> None:
@@ -879,6 +891,409 @@ def _three_stage_valuation(
     )
 
 
+def _resolve_market_implied_stage1_growth_config(payload: dict) -> tuple[bool, dict]:
+    config = payload.get("market_implied_stage1_growth")
+    defaults = {
+        "lower_bound": -0.20,
+        "upper_bound": 0.50,
+        "tolerance": 1e-6,
+        "max_iterations": 200,
+    }
+    if config is None:
+        return False, defaults
+    if not isinstance(config, dict):
+        raise TypeError("payload.market_implied_stage1_growth must be an object when provided")
+
+    enabled = _coerce_bool(config.get("enabled"), default=False)
+    if not enabled:
+        return False, defaults
+
+    lower_bound = _coerce_float(config.get("lower_bound"))
+    upper_bound = _coerce_float(config.get("upper_bound"))
+    tolerance = _coerce_float(config.get("tolerance"))
+    max_iterations_value = _coerce_float(config.get("max_iterations"))
+
+    resolved = {
+        "lower_bound": defaults["lower_bound"] if lower_bound is None else lower_bound,
+        "upper_bound": defaults["upper_bound"] if upper_bound is None else upper_bound,
+        "tolerance": defaults["tolerance"] if tolerance is None else tolerance,
+        "max_iterations": defaults["max_iterations"] if max_iterations_value is None else int(max_iterations_value),
+    }
+    if resolved["lower_bound"] >= resolved["upper_bound"]:
+        raise ValueError("market_implied_stage1_growth bounds must satisfy lower_bound < upper_bound")
+    if resolved["tolerance"] <= 0:
+        raise ValueError("market_implied_stage1_growth tolerance must be positive")
+    if resolved["max_iterations"] <= 0:
+        raise ValueError("market_implied_stage1_growth max_iterations must be positive")
+    return True, resolved
+
+
+def _resolve_market_target(
+    payload: dict,
+    *,
+    shares_out: float | None,
+    net_debt: float | None,
+) -> dict:
+    market_inputs = resolve_market_inputs(payload)
+    fundamentals = payload.get("fundamentals") or {}
+
+    resolved_shares_out = _coerce_float(fundamentals.get("shares_out"))
+    if resolved_shares_out is None:
+        resolved_shares_out = shares_out
+    if resolved_shares_out is None:
+        resolved_shares_out = market_inputs.shares_out
+
+    resolved_net_debt = _coerce_float(fundamentals.get("net_debt"))
+    if resolved_net_debt is None:
+        resolved_net_debt = net_debt
+    if resolved_net_debt is None:
+        resolved_net_debt = market_inputs.net_debt
+
+    enterprise_value_market = market_inputs.enterprise_value_market
+    market_price = market_inputs.market_price
+
+    if enterprise_value_market is None and market_price is None:
+        raise ValueError(
+            "market_implied_stage1_growth requires market_inputs.market_price "
+            "or market_inputs.enterprise_value_market"
+        )
+
+    if market_price is not None and enterprise_value_market is None:
+        if resolved_shares_out is None or resolved_shares_out <= 0:
+            raise ValueError(
+                "market_implied_stage1_growth requires shares_out to resolve market_inputs.market_price"
+            )
+        if resolved_net_debt is None:
+            raise ValueError(
+                "market_implied_stage1_growth requires net_debt to resolve market_inputs.market_price"
+            )
+        enterprise_value_market = (market_price * resolved_shares_out) + resolved_net_debt
+
+    target_metric = "per_share_value"
+    target_value = market_price
+    if target_value is None:
+        if (
+            enterprise_value_market is not None
+            and resolved_shares_out is not None
+            and resolved_shares_out > 0
+            and resolved_net_debt is not None
+        ):
+            market_price = (enterprise_value_market - resolved_net_debt) / resolved_shares_out
+            target_value = market_price
+        else:
+            target_metric = "enterprise_value"
+            target_value = enterprise_value_market
+
+    if enterprise_value_market is None or target_value is None:
+        raise ValueError("market_implied_stage1_growth could not resolve a market target")
+
+    return {
+        "target_metric": target_metric,
+        "target_value": target_value,
+        "market_price": market_price,
+        "enterprise_value_market": enterprise_value_market,
+        "shares_out": resolved_shares_out,
+        "net_debt": 0.0 if resolved_net_debt is None else resolved_net_debt,
+    }
+
+
+def _extract_market_target_metric(valuation: ValuationSummary, target_metric: str) -> float:
+    if target_metric == "per_share_value":
+        value = valuation.per_share_value
+    elif target_metric == "enterprise_value":
+        value = valuation.enterprise_value
+    else:  # pragma: no cover - guarded by caller
+        raise ValueError(f"unsupported market-implied target metric: {target_metric}")
+
+    numeric = _coerce_float(value)
+    if numeric is None:
+        raise ValueError(f"market_implied_stage1_growth requires valuation.{target_metric}")
+    return numeric
+
+
+def _bisect_market_implied_stage1_growth(
+    *,
+    evaluate_metric,
+    target_value: float,
+    lower_bound: float,
+    upper_bound: float,
+    tolerance: float,
+    max_iterations: int,
+) -> dict:
+    def objective(stage1_growth_rate: float) -> float:
+        return evaluate_metric(stage1_growth_rate) - target_value
+
+    f_lower = objective(lower_bound)
+    f_upper = objective(upper_bound)
+    if abs(f_lower) <= tolerance:
+        return {
+            "success": True,
+            "solved_value": lower_bound,
+            "iterations": 0,
+            "residual": abs(f_lower),
+            "reason": None,
+        }
+    if abs(f_upper) <= tolerance:
+        return {
+            "success": True,
+            "solved_value": upper_bound,
+            "iterations": 0,
+            "residual": abs(f_upper),
+            "reason": None,
+        }
+    if f_lower * f_upper > 0:
+        return {
+            "success": False,
+            "solved_value": None,
+            "iterations": None,
+            "residual": None,
+            "reason": "unbracketed_bounds",
+        }
+
+    lower = lower_bound
+    upper = upper_bound
+    iterations = 0
+    while iterations < max_iterations:
+        midpoint = (lower + upper) / 2.0
+        f_mid = objective(midpoint)
+        if abs(f_mid) <= tolerance or abs(upper - lower) <= tolerance:
+            return {
+                "success": True,
+                "solved_value": midpoint,
+                "iterations": iterations + 1,
+                "residual": abs(f_mid),
+                "reason": None,
+            }
+        if f_lower * f_mid <= 0:
+            upper = midpoint
+            f_upper = f_mid
+        else:
+            lower = midpoint
+            f_lower = f_mid
+        iterations += 1
+
+    midpoint = (lower + upper) / 2.0
+    return {
+        "success": False,
+        "solved_value": None,
+        "iterations": max_iterations,
+        "residual": abs(objective(midpoint)),
+        "reason": "max_iterations_exceeded",
+    }
+
+
+def _solve_market_implied_stage1_growth_two_stage(
+    *,
+    fcff_anchor: float,
+    wacc: float,
+    stage1_growth_rate: float,
+    stage1_years: int,
+    terminal_growth_rate: float,
+    target_metric: str,
+    target_value: float,
+    lower_bound: float,
+    upper_bound: float,
+    tolerance: float,
+    max_iterations: int,
+    net_debt: float,
+    shares_out: float | None,
+) -> dict:
+    def build_valuation(candidate_growth_rate: float) -> ValuationSummary:
+        return _two_stage_valuation(
+            fcff_anchor=fcff_anchor,
+            wacc=wacc,
+            growth_rate_high=candidate_growth_rate,
+            years_high=stage1_years,
+            growth_rate_stable=terminal_growth_rate,
+            net_debt=net_debt,
+            shares_out=shares_out,
+            warnings=[],
+        )
+
+    base_case_value = _extract_market_target_metric(build_valuation(stage1_growth_rate), target_metric)
+    result = _bisect_market_implied_stage1_growth(
+        evaluate_metric=lambda candidate_growth_rate: _extract_market_target_metric(
+            build_valuation(candidate_growth_rate),
+            target_metric,
+        ),
+        target_value=target_value,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    result["base_case_value"] = base_case_value
+    return result
+
+
+def _solve_market_implied_stage1_growth_three_stage(
+    *,
+    fcff_anchor: float,
+    wacc: float,
+    stage1_growth_rate: float,
+    stage1_years: int,
+    stage2_end_growth_rate: float,
+    stage2_years: int,
+    stage2_decay_mode: str,
+    terminal_growth_rate: float,
+    target_metric: str,
+    target_value: float,
+    lower_bound: float,
+    upper_bound: float,
+    tolerance: float,
+    max_iterations: int,
+    net_debt: float,
+    shares_out: float | None,
+) -> dict:
+    def build_valuation(candidate_growth_rate: float) -> ValuationSummary:
+        return _three_stage_valuation(
+            fcff_anchor=fcff_anchor,
+            wacc=wacc,
+            stage1_growth_rate=candidate_growth_rate,
+            stage1_years=stage1_years,
+            stage2_end_growth_rate=stage2_end_growth_rate,
+            stage2_years=stage2_years,
+            terminal_growth_rate=terminal_growth_rate,
+            net_debt=net_debt,
+            shares_out=shares_out,
+            warnings=[],
+            stage2_decay_mode=stage2_decay_mode,
+        )
+
+    base_case_value = _extract_market_target_metric(build_valuation(stage1_growth_rate), target_metric)
+    result = _bisect_market_implied_stage1_growth(
+        evaluate_metric=lambda candidate_growth_rate: _extract_market_target_metric(
+            build_valuation(candidate_growth_rate),
+            target_metric,
+        ),
+        target_value=target_value,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        tolerance=tolerance,
+        max_iterations=max_iterations,
+    )
+    result["base_case_value"] = base_case_value
+    return result
+
+
+def _build_market_implied_stage1_growth_summary(
+    *,
+    payload: dict,
+    valuation_model: str,
+    fcff_anchor: float,
+    wacc: float,
+    context: dict | None,
+    warnings: list[str],
+    diagnostics: list[str],
+) -> MarketImpliedStage1GrowthSummary | None:
+    enabled, config = _resolve_market_implied_stage1_growth_config(payload)
+    if not enabled:
+        return None
+
+    if valuation_model not in {"two_stage", "three_stage"}:
+        raise ValueError("market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}")
+    if context is None:
+        raise ValueError("market_implied_stage1_growth requires resolved valuation inputs")
+
+    market_target = _resolve_market_target(
+        payload,
+        shares_out=context.get("shares_out"),
+        net_debt=context.get("net_debt"),
+    )
+    target_metric = str(market_target["target_metric"])
+    target_value = float(market_target["target_value"])
+    solver_kwargs = {
+        "fcff_anchor": fcff_anchor,
+        "wacc": wacc,
+        "stage1_growth_rate": float(context["stage1_growth_rate"]),
+        "target_metric": target_metric,
+        "target_value": target_value,
+        "lower_bound": float(config["lower_bound"]),
+        "upper_bound": float(config["upper_bound"]),
+        "tolerance": float(config["tolerance"]),
+        "max_iterations": int(config["max_iterations"]),
+        "net_debt": float(market_target["net_debt"]),
+        "shares_out": market_target["shares_out"],
+    }
+
+    _append_once(diagnostics, f"market_implied_stage1_growth_model:{valuation_model}")
+    if target_metric == "enterprise_value":
+        _append_once(diagnostics, "market_implied_stage1_growth_target_metric:enterprise_value")
+
+    if valuation_model == "two_stage":
+        result = _solve_market_implied_stage1_growth_two_stage(
+            **solver_kwargs,
+            stage1_years=int(context["stage1_years"]),
+            terminal_growth_rate=float(context["terminal_growth_rate"]),
+        )
+    else:
+        result = _solve_market_implied_stage1_growth_three_stage(
+            **solver_kwargs,
+            stage1_years=int(context["stage1_years"]),
+            stage2_end_growth_rate=float(context["stage2_end_growth_rate"]),
+            stage2_years=int(context["stage2_years"]),
+            stage2_decay_mode=str(context["stage2_decay_mode"]),
+            terminal_growth_rate=float(context["terminal_growth_rate"]),
+        )
+
+    base_input_value = float(context["stage1_growth_rate"])
+    solved_value = _coerce_float(result.get("solved_value"))
+    absolute_offset = None
+    relative_offset_pct = None
+    if solved_value is not None:
+        absolute_offset = solved_value - base_input_value
+        if base_input_value == 0:
+            relative_offset_pct = 0.0 if absolute_offset == 0 else None
+        else:
+            relative_offset_pct = (absolute_offset / abs(base_input_value)) * 100.0
+
+    interpretation = None
+    if result["success"]:
+        if relative_offset_pct is not None and abs(relative_offset_pct) <= 5.0:
+            interpretation = "The market-implied explicit-growth phase is close to the base case."
+        elif solved_value is not None and solved_value > base_input_value:
+            interpretation = "The market is pricing a stronger explicit-growth phase than the base case."
+        elif solved_value is not None and solved_value < base_input_value:
+            interpretation = "The market is pricing a weaker explicit-growth phase than the base case."
+        else:
+            interpretation = "The market-implied explicit-growth phase is close to the base case."
+    else:
+        failure_reason = str(result.get("reason") or "")
+        if failure_reason == "unbracketed_bounds":
+            _append_once(warnings, "market_implied_stage1_growth_bounds_do_not_bracket_root")
+            interpretation = (
+                "The market price cannot be matched within the configured stage1_growth_rate search bounds."
+            )
+        elif failure_reason == "max_iterations_exceeded":
+            _append_once(warnings, "market_implied_stage1_growth_solver_max_iterations_exceeded")
+            interpretation = (
+                "The market-implied stage1 growth solver did not converge within the configured iteration limit."
+            )
+        else:
+            _append_once(warnings, "market_implied_stage1_growth_solver_failed")
+            interpretation = "The market-implied stage1 growth solver could not resolve a result."
+
+    return MarketImpliedStage1GrowthSummary(
+        enabled=True,
+        success=bool(result["success"]),
+        valuation_model=valuation_model,
+        solver="bisection",
+        target_metric=target_metric,
+        market_price=_coerce_float(market_target.get("market_price")),
+        enterprise_value_market=_coerce_float(market_target.get("enterprise_value_market")),
+        base_case_value=_coerce_float(result.get("base_case_value")),
+        base_input_value=base_input_value,
+        solved_value=solved_value,
+        absolute_offset=absolute_offset,
+        relative_offset_pct=relative_offset_pct,
+        lower_bound=float(config["lower_bound"]),
+        upper_bound=float(config["upper_bound"]),
+        iterations=result.get("iterations"),
+        residual=_coerce_float(result.get("residual")),
+        interpretation=interpretation,
+    )
+
+
 def run_valuation(payload: dict) -> ValuationOutput:
     if not isinstance(payload, dict):
         raise TypeError("payload must be a dict")
@@ -903,8 +1318,10 @@ def run_valuation(payload: dict) -> ValuationOutput:
     if wacc_inputs.wacc is None or wacc_inputs.wacc <= 0:
         raise ValueError("Unable to compute a positive WACC")
 
-    net_debt = _coerce_float(fundamentals.get("net_debt")) or 0.0
+    fundamentals_net_debt = _coerce_float(fundamentals.get("net_debt"))
+    net_debt = fundamentals_net_debt or 0.0
     shares_out = _coerce_float(fundamentals.get("shares_out"))
+    market_implied_context: dict | None = None
 
     if effective_valuation_model == "steady_state_single_stage":
         growth_rate = _resolve_rate_input(
@@ -948,6 +1365,13 @@ def run_valuation(payload: dict) -> ValuationOutput:
             shares_out=shares_out,
             warnings=warnings,
         )
+        market_implied_context = {
+            "stage1_growth_rate": growth_rate_high,
+            "stage1_years": years_high,
+            "terminal_growth_rate": growth_rate,
+            "net_debt": fundamentals_net_debt,
+            "shares_out": shares_out,
+        }
         diagnostics.append("valuation_model_two_stage")
     else:
         stage1_growth_rate = _resolve_rate_input(
@@ -1007,10 +1431,30 @@ def run_valuation(payload: dict) -> ValuationOutput:
             warnings=warnings,
             stage2_decay_mode=stage2_decay_mode,
         )
+        market_implied_context = {
+            "stage1_growth_rate": stage1_growth_rate,
+            "stage1_years": stage1_years,
+            "stage2_end_growth_rate": stage2_end_growth_rate,
+            "stage2_years": stage2_years,
+            "stage2_decay_mode": stage2_decay_mode,
+            "terminal_growth_rate": terminal_growth_rate,
+            "net_debt": fundamentals_net_debt,
+            "shares_out": shares_out,
+        }
         diagnostics.append("valuation_model_three_stage")
 
     if capital_structure.source == "default":
         warnings.append("capital_structure_weights_defaulted_to_0.7_0.3")
+
+    market_implied_stage1_growth = _build_market_implied_stage1_growth_summary(
+        payload=payload,
+        valuation_model=effective_valuation_model,
+        fcff_anchor=fcff.anchor,
+        wacc=wacc_inputs.wacc,
+        context=market_implied_context,
+        warnings=warnings,
+        diagnostics=diagnostics,
+    )
 
     output = ValuationOutput(
         ticker=str(payload.get("ticker") or "UNKNOWN"),
@@ -1026,6 +1470,7 @@ def run_valuation(payload: dict) -> ValuationOutput:
         capital_structure=capital_structure,
         fcff=fcff,
         valuation=valuation,
+        market_implied_stage1_growth=market_implied_stage1_growth,
         diagnostics=diagnostics,
         warnings=warnings,
     )

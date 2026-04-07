@@ -227,7 +227,8 @@ def main(argv: list[str] | None = None) -> int:
             cache_dir=args.cache_dir,
             force_refresh=args.refresh_provider,
         )
-        result = run_valuation(payload).to_dict()
+        valuation_output = run_valuation(payload)
+        result = valuation_output.to_dict()
         implied_growth_output = build_implied_growth_output(payload, result)
         if implied_growth_output is not None:
             market_inputs, implied_growth = implied_growth_output

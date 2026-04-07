@@ -14,6 +14,32 @@ def _run_cli(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, check=False, capture_output=True, text=True)
 
 
+def _two_stage_market_implied_payload() -> dict:
+    return {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "two_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.7,
+            "debt_weight": 0.3,
+            "terminal_growth_rate": 0.03,
+            "stage1_growth_rate": 0.10,
+            "stage1_years": 4,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 20.0,
+        },
+    }
+
+
 def test_cli_runs_against_sample_input(tmp_path: Path):
     repo_root = Path(__file__).resolve().parents[1]
     input_path = repo_root / "examples" / "sample_input.json"
@@ -97,6 +123,38 @@ def test_cli_three_stage_pretty_output_includes_requested_and_effective_models(t
     assert payload["valuation"]["explicit_forecast_years"] == 5
 
 
+def test_cli_pretty_output_includes_market_implied_stage1_growth(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    input_path = tmp_path / "market_implied_two_stage.json"
+    output_path = tmp_path / "market_implied_two_stage.output.json"
+
+    payload = _two_stage_market_implied_payload()
+    base_case = cli.run_valuation(payload)
+    assert base_case.valuation.per_share_value is not None
+    payload["market_inputs"] = {
+        "market_price": float(base_case.valuation.per_share_value) * 1.15,
+    }
+    payload["market_implied_stage1_growth"] = {"enabled": True}
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run_cli(
+        repo_root,
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--pretty",
+        "--no-sensitivity",
+    )
+
+    assert result.returncode == 0, result.stderr
+    output_payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert "market_implied_stage1_growth" in output_payload
+    assert output_payload["market_implied_stage1_growth"]["enabled"] is True
+    assert output_payload["market_implied_stage1_growth"]["success"] is True
+    assert output_payload["market_implied_stage1_growth"]["solver"] == "bisection"
+
+
 def test_cli_unsupported_valuation_model_returns_non_zero(tmp_path: Path, monkeypatch, capsys):
     input_path = tmp_path / "bad_model.json"
     output_path = tmp_path / "bad_model_out.json"
@@ -128,6 +186,128 @@ def test_cli_unsupported_valuation_model_returns_non_zero(tmp_path: Path, monkey
     captured = capsys.readouterr()
     assert rc == 2
     assert "unsupported valuation_model" in captured.err
+    assert not output_path.exists()
+
+
+def test_cli_market_implied_stage1_growth_single_stage_returns_non_zero(tmp_path: Path, monkeypatch, capsys):
+    input_path = tmp_path / "single_stage_market_implied.json"
+    output_path = tmp_path / "single_stage_market_implied.output.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "TEST",
+                "market": "US",
+                "valuation_model": "steady_state_single_stage",
+                "assumptions": {
+                    "effective_tax_rate": 0.21,
+                    "marginal_tax_rate": 0.21,
+                    "risk_free_rate": 0.03,
+                    "equity_risk_premium": 0.04,
+                    "beta": 1.0,
+                    "pre_tax_cost_of_debt": 0.03,
+                    "equity_weight": 0.7,
+                    "debt_weight": 0.3,
+                    "terminal_growth_rate": 0.03,
+                },
+                "fundamentals": {
+                    "fcff_anchor": 100.0,
+                    "shares_out": 10.0,
+                    "net_debt": 0.0,
+                },
+                "market_inputs": {
+                    "market_price": 100.0,
+                },
+                "market_implied_stage1_growth": {
+                    "enabled": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "normalize_payload",
+        lambda payload, provider_override=None, *, cache_dir=None, force_refresh=None: payload,
+    )
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--no-sensitivity",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}" in captured.err
+    assert not output_path.exists()
+
+
+def test_cli_market_implied_stage1_growth_missing_market_inputs_returns_non_zero(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+):
+    input_path = tmp_path / "missing_market_inputs.json"
+    output_path = tmp_path / "missing_market_inputs.output.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "TEST",
+                "market": "US",
+                "valuation_model": "two_stage",
+                "assumptions": {
+                    "effective_tax_rate": 0.21,
+                    "marginal_tax_rate": 0.21,
+                    "risk_free_rate": 0.03,
+                    "equity_risk_premium": 0.04,
+                    "beta": 1.0,
+                    "pre_tax_cost_of_debt": 0.03,
+                    "equity_weight": 0.7,
+                    "debt_weight": 0.3,
+                    "terminal_growth_rate": 0.03,
+                    "stage1_growth_rate": 0.10,
+                    "stage1_years": 4,
+                },
+                "fundamentals": {
+                    "fcff_anchor": 100.0,
+                    "shares_out": 10.0,
+                    "net_debt": 20.0,
+                },
+                "market_implied_stage1_growth": {
+                    "enabled": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "normalize_payload",
+        lambda payload, provider_override=None, *, cache_dir=None, force_refresh=None: payload,
+    )
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--no-sensitivity",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert (
+        "market_implied_stage1_growth requires market_inputs.market_price "
+        "or market_inputs.enterprise_value_market"
+    ) in captured.err
     assert not output_path.exists()
 
 

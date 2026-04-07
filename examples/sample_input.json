@@ -6,10 +6,14 @@
   "statement_frequency": "A",
   "valuation_model": "steady_state_single_stage",
   "market_inputs": {
-    "market_price": 225.0
+    "market_price": 226.0
   },
   "implied_growth": {
+    "enabled": true,
     "model": "one_stage"
+  },
+  "market_implied_stage1_growth": {
+    "enabled": false
   },
   "assumptions": {
     "effective_tax_rate": 0.187,

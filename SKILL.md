@@ -104,7 +104,7 @@ For `three_stage`, this optional field is also supported:
 
 - `assumptions.stage2_decay_mode` with default `linear`
 
-`three_stage` applies only to valuation. `payload.implied_growth.model` still supports only `one_stage` and `two_stage`.
+`three_stage` applies to the main valuation path and to the separate `payload.market_implied_stage1_growth` backsolve. `payload.implied_growth.model` still supports only `one_stage` and `two_stage`.
 
 If `fundamentals.fcff_anchor` is not supplied, the runner computes it from:
 
@@ -150,6 +150,16 @@ The payload can also request sensitivity analysis through an optional `sensitivi
 - `sensitivity.wacc_step_bps`
 - `sensitivity.growth_range_bps`
 - `sensitivity.growth_step_bps`
+
+The payload can also request market-implied stage-1 backsolves through an optional `market_implied_stage1_growth` object:
+
+- `market_implied_stage1_growth.enabled`
+- `market_implied_stage1_growth.lower_bound`
+- `market_implied_stage1_growth.upper_bound`
+- `market_implied_stage1_growth.tolerance`
+- `market_implied_stage1_growth.max_iterations`
+
+`market_implied_stage1_growth` supports only `valuation_model=two_stage` and `valuation_model=three_stage`. It solves for the `stage1_growth_rate` required to match the market price or market EV while keeping the other assumptions fixed. It is not a replacement for the existing `implied_growth` block.
 
 Sensitivity output is enabled by default. To disable it for a specific run:
 
@@ -216,6 +226,7 @@ Always return:
 - `valuation.terminal_value`
 - `valuation.terminal_value_share`
 - `valuation.explicit_forecast_years`
+- `market_implied_stage1_growth` when that block is enabled and valid
 - provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
 - by default, return a compact sensitivity summary plus both chart file paths
@@ -238,6 +249,9 @@ Always return:
 - If `valuation_model` is unknown, fail with an error containing `unsupported valuation_model`; do not silently remap it to another model.
 - Do not silently degrade a requested `three_stage` valuation into `two_stage` or `steady_state_single_stage`.
 - Keep implied-growth scope unchanged in `v0.3.0`: only `one_stage` and `two_stage` are valid there.
+- Keep `market_implied_stage1_growth` separate from `implied_growth`. It is a one-variable `stage1_growth_rate` backsolve, not a multi-parameter calibration pass.
+- Reject `market_implied_stage1_growth` on `steady_state_single_stage` with an error containing `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`.
+- If the user wants single-stage market-implied growth, route that request through `payload.implied_growth.model=one_stage` instead.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 
 ## Reference Map
@@ -247,6 +261,8 @@ Read only what you need:
 - [references/methodology.md](./references/methodology.md) for the valuation methodology
 - [examples/sample_input.json](./examples/sample_input.json) for the intended input contract
 - [examples/sample_output.json](./examples/sample_output.json) for the intended output contract
+- [examples/sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json) for a minimal two-stage market-implied stage-1 example
+- [examples/sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json) for a minimal three-stage market-implied stage-1 example
 
 ## Quality Bar
 

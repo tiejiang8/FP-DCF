@@ -71,10 +71,10 @@
   ],
   "warnings": [],
   "market_inputs": {
-    "enterprise_value_market": 3533500000000.0,
+    "enterprise_value_market": 3549000000000.0,
     "enterprise_value_market_source": "derived_from_market_price_shares_out_and_net_debt",
-    "equity_value_market": 3487500000000.0,
-    "market_price": 225.0,
+    "equity_value_market": 3503000000000.0,
+    "market_price": 226.0,
     "market_price_source": "market_inputs.market_price",
     "shares_out": 15500000000.0,
     "shares_out_source": "fundamentals.shares_out",
@@ -90,7 +90,7 @@
     "fcff_anchor": 106216000000.0,
     "wacc": 0.0912624,
     "one_stage": {
-      "growth_rate": 0.05941663866081859
+      "growth_rate": 0.059551681104481925
     },
     "two_stage": null,
     "lower_bound": null,
