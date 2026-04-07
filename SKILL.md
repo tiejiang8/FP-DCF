@@ -7,7 +7,7 @@ user-invocable: true
 
 # FP-DCF
 
-Version: `v0.2.0`
+Version: `v0.3.0`
 
 ## Repository Workflow Notice
 
@@ -83,6 +83,26 @@ Minimum required values for a useful result:
 - `assumptions.beta`
 - `assumptions.pre_tax_cost_of_debt`
 - `fundamentals.fcff_anchor` or `fundamentals.ebit`
+
+Supported `valuation_model` values in `v0.3.0`:
+
+- `steady_state_single_stage`
+- `two_stage`
+- `three_stage`
+
+For `three_stage`, the valuation path requires these assumption fields:
+
+- `assumptions.terminal_growth_rate`
+- `assumptions.stage1_growth_rate`
+- `assumptions.stage1_years`
+- `assumptions.stage2_end_growth_rate`
+- `assumptions.stage2_years`
+
+For `three_stage`, this optional field is also supported:
+
+- `assumptions.stage2_decay_mode` with default `linear`
+
+`three_stage` applies only to valuation. `payload.implied_growth.model` still supports only `one_stage` and `two_stage`.
 
 If `fundamentals.fcff_anchor` is not supplied, the runner computes it from:
 
@@ -180,11 +200,20 @@ If all paths fail, flag the result as degraded rather than pretending the estima
 Always return:
 
 - valuation model used
+- `requested_valuation_model`
+- `effective_valuation_model`
+- `degraded`
 - major assumptions with source labels
 - `FCFF` anchor and anchor method
 - working-capital source used
 - `WACC` inputs and capital weights
 - enterprise value, equity value, and per-share value when available
+- `valuation.present_value_stage1`
+- `valuation.present_value_stage2`
+- `valuation.present_value_terminal`
+- `valuation.terminal_value`
+- `valuation.terminal_value_share`
+- `valuation.explicit_forecast_years`
 - provider cache status diagnostics when provider-backed normalization is used
 - diagnostics, warnings, and degradation flags
 - by default, return a compact sensitivity summary plus both chart file paths
@@ -203,6 +232,9 @@ Always return:
 - If the environment intentionally excludes `matplotlib`, disable sensitivity first with `--no-sensitivity` or `sensitivity.enabled=false` before running the main CLI.
 - If `per_share_value` sensitivity is unavailable because `shares_out` is missing, try `--refresh-provider` first or switch the sensitivity metric to `equity_value`.
 - If the user only gives high-level valuation preferences, ask for or derive the missing structured inputs before running the script.
+- If `valuation_model=three_stage` is missing `stage1_growth_rate`, `stage1_years`, `stage2_end_growth_rate`, `stage2_years`, or `terminal_growth_rate`, fail with a clear error instead of falling back.
+- If `valuation_model` is unknown, fail with an error containing `unsupported valuation_model`; do not silently remap it to another model.
+- Keep implied-growth scope unchanged in `v0.3.0`: only `one_stage` and `two_stage` are valid there.
 - Read [references/methodology.md](./references/methodology.md) only when you need policy detail beyond this file.
 
 ## Reference Map

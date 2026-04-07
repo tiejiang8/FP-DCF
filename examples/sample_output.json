@@ -2,6 +2,9 @@
   "ticker": "AAPL",
   "market": "US",
   "valuation_model": "steady_state_single_stage",
+  "requested_valuation_model": "steady_state_single_stage",
+  "effective_valuation_model": "steady_state_single_stage",
+  "degraded": false,
   "currency": "USD",
   "as_of_date": "2026-04-05",
   "tax": {
@@ -51,8 +54,14 @@
     "terminal_growth_rate": 0.03,
     "terminal_growth_rate_effective": 0.03,
     "present_value_stage1": 0.0,
+    "present_value_stage2": null,
     "present_value_terminal": 1785801405103.2935,
-    "terminal_value_share": 1.0
+    "terminal_value": 1785801405103.2935,
+    "terminal_value_share": 1.0,
+    "explicit_forecast_years": 0,
+    "stage1_years": null,
+    "stage2_years": null,
+    "stage2_decay_mode": null
   },
   "diagnostics": [
     "tax_rate_paths_are_separated",

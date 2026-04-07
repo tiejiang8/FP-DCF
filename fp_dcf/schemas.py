@@ -129,8 +129,14 @@ class ValuationSummary:
     terminal_growth_rate: float | None = None
     terminal_growth_rate_effective: float | None = None
     present_value_stage1: float | None = None
+    present_value_stage2: float | None = None
     present_value_terminal: float | None = None
+    terminal_value: float | None = None
     terminal_value_share: float | None = None
+    explicit_forecast_years: int | None = None
+    stage1_years: int | None = None
+    stage2_years: int | None = None
+    stage2_decay_mode: str | None = None
 
 
 @dataclass(slots=True)
@@ -138,6 +144,9 @@ class ValuationOutput:
     ticker: str
     market: str
     valuation_model: str
+    requested_valuation_model: str | None = None
+    effective_valuation_model: str | None = None
+    degraded: bool = False
     currency: str | None = None
     as_of_date: str | None = None
     tax: TaxAssumptions = field(default_factory=TaxAssumptions)

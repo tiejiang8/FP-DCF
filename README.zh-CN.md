@@ -48,33 +48,29 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 
 ## 你会得到什么
 
-* 结构化估值 JSON
-* `one_stage` / `two_stage` implied growth
+* 支持 `steady_state_single_stage`、`two_stage`、`three_stage` 的结构化估值 JSON
+* `one_stage` / `two_stage` implied growth；`v0.3.0` 的 `three_stage` 仅针对 valuation，不支持隐含增长求解
 * `WACC x Terminal Growth` 敏感性热力图
 * 带本地缓存的 Yahoo normalization
 * 适合下游工具消费的 machine-readable diagnostics
+* 显式输出 `requested_valuation_model` / `effective_valuation_model`，unknown `valuation_model` 不再 silent fallback
 
 ## 输出形状示意
 
 ```json
 {
-  "fcff": {
-    "selected_path": "ebiat",
-    "anchor_mode": "latest"
-  },
+  "valuation_model": "three_stage",
+  "requested_valuation_model": "three_stage",
+  "effective_valuation_model": "three_stage",
   "valuation": {
-    "enterprise_value": 1785801405103.29,
-    "per_share_value": 112.25
+    "present_value_stage1": 514861452010.8,
+    "present_value_stage2": 285871425709.47,
+    "present_value_terminal": 1539144808713.01,
+    "terminal_value": 3095373176764.22,
+    "explicit_forecast_years": 8
   },
-  "implied_growth": {
-    "model": "one_stage",
-    "one_stage": {
-      "growth_rate": 0.0594
-    }
-  },
-  "sensitivity": {
-    "metric": "per_share_value"
-  }
+  "diagnostics": ["valuation_model_three_stage"],
+  "warnings": []
 }
 ```
 
@@ -82,6 +78,8 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 
 * [sample_input.json](./examples/sample_input.json)
 * [sample_output.json](./examples/sample_output.json)
+* [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
+* [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
 * [方法论文档](./references/methodology.md)
 * [English](./README.md)
 
@@ -166,6 +164,60 @@ cat > /tmp/fp_dcf_yahoo_input.json <<'JSON'
 JSON
 
 python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
+```
+
+## 估值模型
+
+FP-DCF `v0.3.0` 在主估值链中支持以下 `valuation_model`：
+
+* `steady_state_single_stage`
+* `two_stage`
+* `three_stage`
+
+其中 `three_stage` 是真正的三阶段估值：高增长期、收敛期、终值期。对未知 `valuation_model`，FP-DCF 现在会直接报错，并在错误信息中包含 `unsupported valuation_model`；不再静默回退到 `steady_state_single_stage`。
+
+`v0.3.0` 的 `three_stage` 只针对 valuation。隐含增长求解器仍只支持 `one_stage` 与 `two_stage`。
+
+三阶段输入示例：
+
+```json
+{
+  "valuation_model": "three_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.08,
+    "stage1_years": 5,
+    "stage2_end_growth_rate": 0.045,
+    "stage2_years": 3,
+    "stage2_decay_mode": "linear"
+  },
+  "fundamentals": {
+    "fcff_anchor": 106216000000.0,
+    "net_debt": 46000000000.0,
+    "shares_out": 15500000000.0
+  }
+}
+```
+
+三阶段输出片段：
+
+```json
+{
+  "valuation_model": "three_stage",
+  "requested_valuation_model": "three_stage",
+  "effective_valuation_model": "three_stage",
+  "valuation": {
+    "present_value_stage1": 514861452010.79553,
+    "present_value_stage2": 285871425709.4699,
+    "present_value_terminal": 1539144808713.0115,
+    "terminal_value": 3095373176764.218,
+    "terminal_value_share": 0.6577885748631422,
+    "explicit_forecast_years": 8,
+    "stage1_years": 5,
+    "stage2_years": 3,
+    "stage2_decay_mode": "linear"
+  }
+}
 ```
 
 ## 敏感性热力图
@@ -256,6 +308,8 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity -
 * 直接提供 `payload.market_inputs.enterprise_value_market`，或
 * 提供 `payload.market_inputs.market_price`，再结合 `shares_out` 与 `net_debt` 推导 EV
 * `payload.implied_growth.model` 支持 `one_stage` 与 `two_stage`
+
+`v0.3.0` 中，隐含增长求解器不支持 `three_stage`。
 
 单阶段示例：
 

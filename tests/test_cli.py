@@ -9,21 +9,24 @@ from fp_dcf import cli
 from fp_dcf import SensitivityHeatmapOutput
 
 
+def _run_cli(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    cmd = [sys.executable, str(repo_root / "scripts" / "run_dcf.py"), *args]
+    return subprocess.run(cmd, check=False, capture_output=True, text=True)
+
+
 def test_cli_runs_against_sample_input(tmp_path: Path):
     repo_root = Path(__file__).resolve().parents[1]
     input_path = repo_root / "examples" / "sample_input.json"
     output_path = tmp_path / "out.json"
 
-    cmd = [
-        sys.executable,
-        str(repo_root / "scripts" / "run_dcf.py"),
+    result = _run_cli(
+        repo_root,
         "--input",
         str(input_path),
         "--output",
         str(output_path),
         "--pretty",
-    ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    )
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(output_path.read_text(encoding="utf-8"))
@@ -36,6 +39,143 @@ def test_cli_runs_against_sample_input(tmp_path: Path):
     assert payload["artifacts"]["sensitivity_heatmap_svg_path"] == str(output_path.with_name("out.sensitivity.svg"))
     assert output_path.with_name("out.sensitivity.svg").exists()
     assert output_path.with_name("out.sensitivity.png").exists()
+
+
+def test_cli_three_stage_pretty_output_includes_requested_and_effective_models(tmp_path: Path):
+    repo_root = Path(__file__).resolve().parents[1]
+    input_path = tmp_path / "three_stage_input.json"
+    output_path = tmp_path / "three_stage_output.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "TEST",
+                "market": "US",
+                "valuation_model": "three_stage",
+                "assumptions": {
+                    "effective_tax_rate": 0.21,
+                    "marginal_tax_rate": 0.21,
+                    "risk_free_rate": 0.03,
+                    "equity_risk_premium": 0.04,
+                    "beta": 1.0,
+                    "pre_tax_cost_of_debt": 0.03,
+                    "equity_weight": 0.7,
+                    "debt_weight": 0.3,
+                    "terminal_growth_rate": 0.03,
+                    "stage1_growth_rate": 0.12,
+                    "stage1_years": 3,
+                    "stage2_end_growth_rate": 0.06,
+                    "stage2_years": 2,
+                },
+                "fundamentals": {
+                    "fcff_anchor": 100.0,
+                    "shares_out": 10.0,
+                    "net_debt": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_cli(
+        repo_root,
+        "--input",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--pretty",
+        "--no-sensitivity",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["valuation_model"] == "three_stage"
+    assert payload["requested_valuation_model"] == "three_stage"
+    assert payload["effective_valuation_model"] == "three_stage"
+    assert payload["valuation"]["present_value_stage2"] is not None
+
+
+def test_cli_unsupported_valuation_model_returns_non_zero(tmp_path: Path, monkeypatch, capsys):
+    input_path = tmp_path / "bad_model.json"
+    output_path = tmp_path / "bad_model_out.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "TEST",
+                "market": "US",
+                "valuation_model": "foo_bar",
+                "assumptions": {"terminal_growth_rate": 0.03},
+                "fundamentals": {"fcff_anchor": 100.0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli, "normalize_payload", lambda payload, provider_override=None, *, cache_dir=None, force_refresh=None: payload)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--no-sensitivity",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "unsupported valuation_model" in captured.err
+    assert not output_path.exists()
+
+
+def test_cli_three_stage_missing_params_returns_non_zero(tmp_path: Path, monkeypatch, capsys):
+    input_path = tmp_path / "missing_three_stage.json"
+    output_path = tmp_path / "missing_three_stage_out.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "ticker": "TEST",
+                "market": "US",
+                "valuation_model": "three_stage",
+                "assumptions": {
+                    "effective_tax_rate": 0.21,
+                    "marginal_tax_rate": 0.21,
+                    "risk_free_rate": 0.03,
+                    "equity_risk_premium": 0.04,
+                    "beta": 1.0,
+                    "pre_tax_cost_of_debt": 0.03,
+                    "equity_weight": 0.7,
+                    "debt_weight": 0.3,
+                    "terminal_growth_rate": 0.03,
+                    "stage1_growth_rate": 0.12,
+                    "stage1_years": 3,
+                },
+                "fundamentals": {
+                    "fcff_anchor": 100.0,
+                    "shares_out": 10.0,
+                    "net_debt": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(cli, "normalize_payload", lambda payload, provider_override=None, *, cache_dir=None, force_refresh=None: payload)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--no-sensitivity",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "Missing assumptions.stage2_end_growth_rate" in captured.err
+    assert not output_path.exists()
 
 
 def test_cli_passes_cache_options_to_normalizer(tmp_path: Path, monkeypatch):

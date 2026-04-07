@@ -48,33 +48,29 @@ Unlike many open-source DCF scripts, FP-DCF:
 
 ## What you get
 
-* structured valuation JSON
-* implied growth (`one_stage` / `two_stage`)
+* structured valuation JSON for `steady_state_single_stage`, `two_stage`, and `three_stage`
+* implied growth (`one_stage` / `two_stage` only; `three_stage` is not supported for the implied-growth solver in `v0.3.0`)
 * `WACC x Terminal Growth` sensitivity heatmaps
 * Yahoo-backed normalization with local cache
 * machine-readable diagnostics for downstream tools
+* explicit `requested_valuation_model` / `effective_valuation_model` output with no silent fallback on unknown `valuation_model`
 
 ## Sample output shape
 
 ```json
 {
-  "fcff": {
-    "selected_path": "ebiat",
-    "anchor_mode": "latest"
-  },
+  "valuation_model": "three_stage",
+  "requested_valuation_model": "three_stage",
+  "effective_valuation_model": "three_stage",
   "valuation": {
-    "enterprise_value": 1785801405103.29,
-    "per_share_value": 112.25
+    "present_value_stage1": 514861452010.8,
+    "present_value_stage2": 285871425709.47,
+    "present_value_terminal": 1539144808713.01,
+    "terminal_value": 3095373176764.22,
+    "explicit_forecast_years": 8
   },
-  "implied_growth": {
-    "model": "one_stage",
-    "one_stage": {
-      "growth_rate": 0.0594
-    }
-  },
-  "sensitivity": {
-    "metric": "per_share_value"
-  }
+  "diagnostics": ["valuation_model_three_stage"],
+  "warnings": []
 }
 ```
 
@@ -82,6 +78,8 @@ See also:
 
 * [sample_input.json](./examples/sample_input.json)
 * [sample_output.json](./examples/sample_output.json)
+* [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
+* [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
 * [Methodology](./references/methodology.md)
 * [简体中文](./README.zh-CN.md)
 
@@ -166,6 +164,60 @@ cat > /tmp/fp_dcf_yahoo_input.json <<'JSON'
 JSON
 
 python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
+```
+
+## Valuation models
+
+FP-DCF `v0.3.0` supports these valuation models in the main valuation path:
+
+* `steady_state_single_stage`
+* `two_stage`
+* `three_stage`
+
+`three_stage` is an explicit valuation model with a high-growth stage, a linear fade stage, and a Gordon Growth terminal stage. Unknown `valuation_model` values now fail fast with an error containing `unsupported valuation_model`; FP-DCF no longer silently falls back to `steady_state_single_stage`.
+
+`three_stage` in `v0.3.0` applies only to valuation. The implied-growth solver still supports only `one_stage` and `two_stage`.
+
+Three-stage input example:
+
+```json
+{
+  "valuation_model": "three_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.03,
+    "stage1_growth_rate": 0.08,
+    "stage1_years": 5,
+    "stage2_end_growth_rate": 0.045,
+    "stage2_years": 3,
+    "stage2_decay_mode": "linear"
+  },
+  "fundamentals": {
+    "fcff_anchor": 106216000000.0,
+    "net_debt": 46000000000.0,
+    "shares_out": 15500000000.0
+  }
+}
+```
+
+Three-stage output excerpt:
+
+```json
+{
+  "valuation_model": "three_stage",
+  "requested_valuation_model": "three_stage",
+  "effective_valuation_model": "three_stage",
+  "valuation": {
+    "present_value_stage1": 514861452010.79553,
+    "present_value_stage2": 285871425709.4699,
+    "present_value_terminal": 1539144808713.0115,
+    "terminal_value": 3095373176764.218,
+    "terminal_value_share": 0.6577885748631422,
+    "explicit_forecast_years": 8,
+    "stage1_years": 5,
+    "stage2_years": 3,
+    "stage2_decay_mode": "linear"
+  }
+}
 ```
 
 ## Sensitivity heatmap
@@ -256,6 +308,8 @@ Input contract:
 * `payload.market_inputs.enterprise_value_market`, or
 * `payload.market_inputs.market_price` + `shares_out` + `net_debt`
 * `payload.implied_growth.model`: `one_stage` or `two_stage`
+
+`three_stage` is not supported in the implied-growth solver in `v0.3.0`.
 
 One-stage example:
 

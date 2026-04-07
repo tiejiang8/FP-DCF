@@ -1,6 +1,38 @@
 import pytest
 
 from fp_dcf import run_valuation
+from fp_dcf.engine import _build_three_stage_growth_schedule
+
+
+def _three_stage_payload(**assumption_overrides):
+    assumptions = {
+        "effective_tax_rate": 0.21,
+        "marginal_tax_rate": 0.21,
+        "risk_free_rate": 0.03,
+        "equity_risk_premium": 0.04,
+        "beta": 1.0,
+        "pre_tax_cost_of_debt": 0.03,
+        "equity_weight": 0.7,
+        "debt_weight": 0.3,
+        "terminal_growth_rate": 0.03,
+        "stage1_growth_rate": 0.12,
+        "stage1_years": 3,
+        "stage2_end_growth_rate": 0.06,
+        "stage2_years": 2,
+        "stage2_decay_mode": "linear",
+    }
+    assumptions.update(assumption_overrides)
+    return {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "three_stage",
+        "assumptions": assumptions,
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 0.0,
+        },
+    }
 
 
 def test_run_valuation_single_stage_from_fundamentals():
@@ -520,3 +552,87 @@ def test_run_valuation_preserves_capital_structure_fallback_warning():
 
     assert out.capital_structure.source == "yahoo:market_value_using_net_debt_fallback"
     assert "yahoo_total_debt_unavailable_used_net_debt_for_capital_structure" in out.warnings
+
+
+def test_run_valuation_three_stage_basic():
+    out = run_valuation(_three_stage_payload())
+
+    assert out.requested_valuation_model == "three_stage"
+    assert out.effective_valuation_model == "three_stage"
+    assert out.valuation_model == "three_stage"
+    assert out.degraded is False
+    assert "valuation_model_three_stage" in out.diagnostics
+    assert out.valuation.present_value_stage1 is not None
+    assert out.valuation.present_value_stage2 is not None
+    assert out.valuation.present_value_terminal is not None
+    assert out.valuation.terminal_value is not None
+    assert out.valuation.explicit_forecast_years == 5
+    assert out.valuation.stage1_years == 3
+    assert out.valuation.stage2_years == 2
+    assert out.valuation.stage2_decay_mode == "linear"
+    assert out.valuation.enterprise_value == pytest.approx(
+        (out.valuation.present_value_stage1 or 0.0)
+        + (out.valuation.present_value_stage2 or 0.0)
+        + (out.valuation.present_value_terminal or 0.0)
+    )
+
+
+def test_run_valuation_three_stage_linear_decay_schedule():
+    schedule, stage1_years, stage2_years, decay_mode = _build_three_stage_growth_schedule(
+        stage1_growth_rate=0.10,
+        stage1_years=2,
+        stage2_end_growth_rate=0.04,
+        stage2_years=3,
+        stage2_decay_mode="linear",
+    )
+
+    assert stage1_years == 2
+    assert stage2_years == 3
+    assert decay_mode == "linear"
+    assert schedule[:2] == pytest.approx([0.10, 0.10])
+    assert schedule[2:] == pytest.approx([0.08, 0.06, 0.04])
+
+    out = run_valuation(
+        _three_stage_payload(
+            stage1_growth_rate=0.10,
+            stage1_years=2,
+            stage2_end_growth_rate=0.04,
+            stage2_years=3,
+        )
+    )
+
+    assert out.valuation.explicit_forecast_years == 5
+
+
+def test_run_valuation_three_stage_clamps_terminal_growth_below_wacc():
+    out = run_valuation(
+        _three_stage_payload(
+            terminal_growth_rate=0.08,
+            stage2_end_growth_rate=0.09,
+        )
+    )
+
+    assert out.valuation.terminal_growth_rate == pytest.approx(0.08)
+    assert out.valuation.terminal_growth_rate_effective is not None
+    assert out.valuation.terminal_growth_rate_effective < out.wacc_inputs.wacc
+    assert "terminal_growth_rate_clamped_below_wacc" in out.warnings
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"stage2_end_growth_rate": None}, "Missing assumptions.stage2_end_growth_rate"),
+        ({"stage2_years": None}, "Missing assumptions.stage2_years"),
+    ],
+)
+def test_run_valuation_three_stage_missing_required_params_errors(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        run_valuation(_three_stage_payload(**overrides))
+
+
+def test_run_valuation_unknown_model_errors():
+    payload = _three_stage_payload()
+    payload["valuation_model"] = "foo_bar"
+
+    with pytest.raises(ValueError, match="unsupported valuation_model"):
+        run_valuation(payload)

@@ -12,6 +12,12 @@ from .schemas import (
     WACCInputs,
 )
 
+_SUPPORTED_VALUATION_MODELS = {
+    "steady_state_single_stage",
+    "two_stage",
+    "three_stage",
+}
+
 
 def _coerce_float(value) -> float | None:
     if value is None or value == "":
@@ -40,6 +46,63 @@ def _clip_rate(value: float | None, *, low: float = 0.0, high: float = 0.95) -> 
     if value is None:
         return None
     return min(max(value, low), high)
+
+
+def _coerce_positive_int(value, *, field_name: str) -> int:
+    numeric = _coerce_float(value)
+    if numeric is None:
+        raise ValueError(f"Missing assumptions.{field_name} for three_stage valuation_model")
+    if not float(numeric).is_integer() or numeric <= 0:
+        raise ValueError(f"assumptions.{field_name} must be a positive integer")
+    return int(numeric)
+
+
+def _validate_valuation_model(raw_value) -> tuple[str, str]:
+    requested_model = str(raw_value or "steady_state_single_stage").strip() or "steady_state_single_stage"
+    if requested_model not in _SUPPORTED_VALUATION_MODELS:
+        raise ValueError(f"unsupported valuation_model: {requested_model}")
+    return requested_model, requested_model
+
+
+def _resolve_rate_input(
+    assumptions: dict,
+    field_name: str,
+    *,
+    low: float,
+    high: float,
+    warnings: list[str],
+    required: bool = False,
+    default: float | None = None,
+    missing_warning: str | None = None,
+    clip_warning: str | None = None,
+) -> float:
+    value = _coerce_float(assumptions.get(field_name))
+    if value is None:
+        if required:
+            raise ValueError(f"Missing assumptions.{field_name} for three_stage valuation_model")
+        if default is None:
+            raise ValueError(f"Missing assumptions.{field_name}")
+        if missing_warning is not None:
+            _append_once(warnings, missing_warning)
+        return default
+
+    clipped = _clip_rate(value, low=low, high=high)
+    if clipped != value and clip_warning is not None:
+        _append_once(warnings, clip_warning)
+    return float(clipped)
+
+
+def _clamp_growth_below_wacc(
+    growth_rate: float,
+    wacc: float,
+    *,
+    warnings: list[str],
+    warning_key: str,
+) -> float:
+    if growth_rate < wacc:
+        return growth_rate
+    _append_once(warnings, warning_key)
+    return max(0.0, wacc - 0.01)
 
 
 def _normalize_weights(
@@ -611,10 +674,12 @@ def _steady_state_valuation(
     shares_out: float | None,
     warnings: list[str],
 ) -> ValuationSummary:
-    effective_growth = growth_rate
-    if effective_growth >= wacc:
-        effective_growth = max(0.0, wacc - 0.01)
-        warnings.append("terminal_growth_rate_clamped_below_wacc")
+    effective_growth = _clamp_growth_below_wacc(
+        growth_rate,
+        wacc,
+        warnings=warnings,
+        warning_key="terminal_growth_rate_clamped_below_wacc",
+    )
 
     fcff_1 = fcff_anchor * (1.0 + effective_growth)
     enterprise_value = fcff_1 / (wacc - effective_growth)
@@ -631,8 +696,11 @@ def _steady_state_valuation(
         terminal_growth_rate=growth_rate,
         terminal_growth_rate_effective=effective_growth,
         present_value_stage1=0.0,
+        present_value_stage2=None,
         present_value_terminal=enterprise_value,
+        terminal_value=enterprise_value,
         terminal_value_share=1.0,
+        explicit_forecast_years=0,
     )
 
 
@@ -647,10 +715,12 @@ def _two_stage_valuation(
     warnings: list[str],
 ) -> ValuationSummary:
     years = max(1, int(years_high))
-    g_stable_eff = growth_rate_stable
-    if g_stable_eff >= wacc:
-        g_stable_eff = max(0.0, wacc - 0.01)
-        warnings.append("stable_growth_rate_clamped_below_wacc")
+    g_stable_eff = _clamp_growth_below_wacc(
+        growth_rate_stable,
+        wacc,
+        warnings=warnings,
+        warning_key="stable_growth_rate_clamped_below_wacc",
+    )
 
     fcff_t = fcff_anchor
     pv_stage1 = 0.0
@@ -679,8 +749,108 @@ def _two_stage_valuation(
         terminal_growth_rate=growth_rate_stable,
         terminal_growth_rate_effective=g_stable_eff,
         present_value_stage1=pv_stage1,
+        present_value_stage2=None,
         present_value_terminal=pv_terminal,
+        terminal_value=terminal_value,
         terminal_value_share=terminal_share,
+        explicit_forecast_years=years,
+    )
+
+
+def _build_three_stage_growth_schedule(
+    *,
+    stage1_growth_rate: float,
+    stage1_years: int,
+    stage2_end_growth_rate: float,
+    stage2_years: int,
+    stage2_decay_mode: str = "linear",
+) -> tuple[list[float], int, int, str]:
+    if stage1_years <= 0:
+        raise ValueError("assumptions.stage1_years must be a positive integer")
+    if stage2_years <= 0:
+        raise ValueError("assumptions.stage2_years must be a positive integer")
+
+    decay_mode = str(stage2_decay_mode or "linear").strip() or "linear"
+    if decay_mode != "linear":
+        raise ValueError(f"unsupported stage2_decay_mode: {decay_mode}")
+
+    growth_rates = [stage1_growth_rate] * stage1_years
+    linear_step = (stage2_end_growth_rate - stage1_growth_rate) / stage2_years
+    growth_rates.extend(
+        stage1_growth_rate + (linear_step * year)
+        for year in range(1, stage2_years + 1)
+    )
+    return growth_rates, stage1_years, stage2_years, decay_mode
+
+
+def _three_stage_valuation(
+    *,
+    fcff_anchor: float,
+    wacc: float,
+    stage1_growth_rate: float,
+    stage1_years: int,
+    stage2_end_growth_rate: float,
+    stage2_years: int,
+    terminal_growth_rate: float,
+    net_debt: float,
+    shares_out: float | None,
+    warnings: list[str],
+    stage2_decay_mode: str = "linear",
+) -> ValuationSummary:
+    growth_schedule, stage1_years, stage2_years, decay_mode = _build_three_stage_growth_schedule(
+        stage1_growth_rate=stage1_growth_rate,
+        stage1_years=stage1_years,
+        stage2_end_growth_rate=stage2_end_growth_rate,
+        stage2_years=stage2_years,
+        stage2_decay_mode=stage2_decay_mode,
+    )
+    effective_terminal_growth = _clamp_growth_below_wacc(
+        terminal_growth_rate,
+        wacc,
+        warnings=warnings,
+        warning_key="terminal_growth_rate_clamped_below_wacc",
+    )
+
+    fcff_t = fcff_anchor
+    pv_stage1 = 0.0
+    pv_stage2 = 0.0
+    for year, growth_rate in enumerate(growth_schedule, start=1):
+        fcff_t = fcff_t * (1.0 + growth_rate)
+        present_value = fcff_t / ((1.0 + wacc) ** year)
+        if year <= stage1_years:
+            pv_stage1 += present_value
+        else:
+            pv_stage2 += present_value
+
+    explicit_forecast_years = stage1_years + stage2_years
+    fcff_terminal = fcff_t * (1.0 + effective_terminal_growth)
+    terminal_value = fcff_terminal / (wacc - effective_terminal_growth)
+    pv_terminal = terminal_value / ((1.0 + wacc) ** explicit_forecast_years)
+    enterprise_value = pv_stage1 + pv_stage2 + pv_terminal
+    equity_value = enterprise_value - net_debt
+    per_share = equity_value / shares_out if shares_out and shares_out > 0 else None
+    terminal_share = pv_terminal / enterprise_value if enterprise_value else None
+
+    if shares_out in (None, 0):
+        warnings.append("shares_out_missing_per_share_value_unavailable")
+    if terminal_share is not None and terminal_share > 0.75:
+        warnings.append("terminal_value_share_above_0.75")
+
+    return ValuationSummary(
+        enterprise_value=enterprise_value,
+        equity_value=equity_value,
+        per_share_value=per_share,
+        terminal_growth_rate=terminal_growth_rate,
+        terminal_growth_rate_effective=effective_terminal_growth,
+        present_value_stage1=pv_stage1,
+        present_value_stage2=pv_stage2,
+        present_value_terminal=pv_terminal,
+        terminal_value=terminal_value,
+        terminal_value_share=terminal_share,
+        explicit_forecast_years=explicit_forecast_years,
+        stage1_years=stage1_years,
+        stage2_years=stage2_years,
+        stage2_decay_mode=decay_mode,
     )
 
 
@@ -692,6 +862,9 @@ def run_valuation(payload: dict) -> ValuationOutput:
     assumptions = payload.get("assumptions") or {}
     warnings: list[str] = list(payload.get("_prefill_warnings", []))
     diagnostics: list[str] = list(payload.get("_prefill_diagnostics", []))
+    requested_valuation_model, effective_valuation_model = _validate_valuation_model(
+        payload.get("valuation_model")
+    )
 
     tax = _resolve_tax_inputs(payload, warnings, diagnostics)
     fcff = _compute_fcff_anchor(fundamentals, assumptions, tax, warnings, diagnostics)
@@ -706,20 +879,40 @@ def run_valuation(payload: dict) -> ValuationOutput:
     if wacc_inputs.wacc is None or wacc_inputs.wacc <= 0:
         raise ValueError("Unable to compute a positive WACC")
 
-    growth_rate = _clip_rate(
-        _coerce_float(assumptions.get("terminal_growth_rate")),
-        low=0.0,
-        high=0.15,
-    )
-    if growth_rate is None:
-        growth_rate = 0.03
-        warnings.append("terminal_growth_rate_missing_defaulted_to_0.03")
-
     net_debt = _coerce_float(fundamentals.get("net_debt")) or 0.0
     shares_out = _coerce_float(fundamentals.get("shares_out"))
-    valuation_model = str(payload.get("valuation_model") or "steady_state_single_stage")
 
-    if valuation_model == "two_stage":
+    if effective_valuation_model == "steady_state_single_stage":
+        growth_rate = _resolve_rate_input(
+            assumptions,
+            "terminal_growth_rate",
+            low=0.0,
+            high=0.15,
+            warnings=warnings,
+            default=0.03,
+            missing_warning="terminal_growth_rate_missing_defaulted_to_0.03",
+            clip_warning="terminal_growth_rate_clipped_to_supported_range",
+        )
+        valuation = _steady_state_valuation(
+            fcff_anchor=fcff.anchor,
+            wacc=wacc_inputs.wacc,
+            growth_rate=growth_rate,
+            net_debt=net_debt,
+            shares_out=shares_out,
+            warnings=warnings,
+        )
+        diagnostics.append("valuation_model_steady_state_single_stage")
+    elif effective_valuation_model == "two_stage":
+        growth_rate = _resolve_rate_input(
+            assumptions,
+            "terminal_growth_rate",
+            low=0.0,
+            high=0.15,
+            warnings=warnings,
+            default=0.03,
+            missing_warning="terminal_growth_rate_missing_defaulted_to_0.03",
+            clip_warning="terminal_growth_rate_clipped_to_supported_range",
+        )
         growth_rate_high = _clip_rate(
             _coerce_float(assumptions.get("high_growth_rate")),
             low=-0.5,
@@ -741,15 +934,64 @@ def run_valuation(payload: dict) -> ValuationOutput:
         )
         diagnostics.append("valuation_model_two_stage")
     else:
-        valuation = _steady_state_valuation(
+        stage1_growth_rate = _resolve_rate_input(
+            assumptions,
+            "stage1_growth_rate",
+            low=0.0,
+            high=1.0,
+            warnings=warnings,
+            required=True,
+            clip_warning="stage1_growth_rate_clipped_to_supported_range",
+        )
+        stage2_end_growth_rate = _resolve_rate_input(
+            assumptions,
+            "stage2_end_growth_rate",
+            low=0.0,
+            high=1.0,
+            warnings=warnings,
+            required=True,
+            clip_warning="stage2_end_growth_rate_clipped_to_supported_range",
+        )
+        terminal_growth_rate = _resolve_rate_input(
+            assumptions,
+            "terminal_growth_rate",
+            low=0.0,
+            high=0.15,
+            warnings=warnings,
+            required=True,
+            clip_warning="terminal_growth_rate_clipped_to_supported_range",
+        )
+        if not (
+            stage1_growth_rate >= stage2_end_growth_rate >= terminal_growth_rate
+        ):
+            raise ValueError(
+                "three_stage growth rates must satisfy "
+                "stage1_growth_rate >= stage2_end_growth_rate >= terminal_growth_rate"
+            )
+        stage1_years = _coerce_positive_int(
+            assumptions.get("stage1_years"),
+            field_name="stage1_years",
+        )
+        stage2_years = _coerce_positive_int(
+            assumptions.get("stage2_years"),
+            field_name="stage2_years",
+        )
+        stage2_decay_mode = str(assumptions.get("stage2_decay_mode") or "linear").strip() or "linear"
+
+        valuation = _three_stage_valuation(
             fcff_anchor=fcff.anchor,
             wacc=wacc_inputs.wacc,
-            growth_rate=growth_rate,
+            stage1_growth_rate=stage1_growth_rate,
+            stage1_years=stage1_years,
+            stage2_end_growth_rate=stage2_end_growth_rate,
+            stage2_years=stage2_years,
+            terminal_growth_rate=terminal_growth_rate,
             net_debt=net_debt,
             shares_out=shares_out,
             warnings=warnings,
+            stage2_decay_mode=stage2_decay_mode,
         )
-        diagnostics.append("valuation_model_steady_state_single_stage")
+        diagnostics.append("valuation_model_three_stage")
 
     if capital_structure.source == "default":
         warnings.append("capital_structure_weights_defaulted_to_0.7_0.3")
@@ -759,7 +1001,9 @@ def run_valuation(payload: dict) -> ValuationOutput:
         market=str(payload.get("market") or "UNKNOWN"),
         currency=payload.get("currency"),
         as_of_date=str(payload.get("as_of_date") or date.today().isoformat()),
-        valuation_model=valuation_model,
+        valuation_model=effective_valuation_model,
+        requested_valuation_model=requested_valuation_model,
+        effective_valuation_model=effective_valuation_model,
         tax=tax,
         wacc_inputs=wacc_inputs,
         capital_structure=capital_structure,
