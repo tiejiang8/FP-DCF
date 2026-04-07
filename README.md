@@ -210,7 +210,7 @@ python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 
 ## Valuation models
 
-FP-DCF `v0.3.0` supports these valuation models in the main valuation path:
+FP-DCF `v0.4.0` supports these valuation models in the main valuation path:
 
 * `steady_state_single_stage`
 * `two_stage`
@@ -222,7 +222,7 @@ FP-DCF `v0.3.0` supports these valuation models in the main valuation path:
 
 When `valuation_model=three_stage`, missing required stage inputs also fail fast instead of degrading into another valuation model.
 
-`three_stage` in `v0.3.0` applies to the main valuation path and to the separate `market_implied_stage1_growth` backsolve. The existing `implied_growth` solver still supports only `one_stage` and `two_stage`.
+`three_stage` in `v0.4.0` applies to the main valuation path and to the separate `market_implied_stage1_growth` backsolve. The existing `implied_growth` solver still supports only `one_stage` and `two_stage`.
 
 Three-stage input example:
 
@@ -355,7 +355,7 @@ Input contract:
 * `payload.market_inputs.market_price` + `shares_out` + `net_debt`
 * `payload.implied_growth.model`: `one_stage` or `two_stage`
 
-`three_stage` is not supported in the implied-growth solver in `v0.3.0`.
+`three_stage` is not supported in the existing implied-growth solver in `v0.4.0`.
 
 One-stage example:
 

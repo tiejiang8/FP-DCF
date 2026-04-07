@@ -210,7 +210,7 @@ python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 
 ## 估值模型
 
-FP-DCF `v0.3.0` 在主估值链中支持以下 `valuation_model`：
+FP-DCF `v0.4.0` 在主估值链中支持以下 `valuation_model`：
 
 * `steady_state_single_stage`
 * `two_stage`
@@ -218,7 +218,7 @@ FP-DCF `v0.3.0` 在主估值链中支持以下 `valuation_model`：
 
 其中 `three_stage` 是真正的三阶段估值：高增长期、收敛期、终值期。对未知 `valuation_model`，FP-DCF 现在会直接报错，并在错误信息中包含 `unsupported valuation_model`；不再静默回退到 `steady_state_single_stage`。
 
-`v0.3.0` 的 `three_stage` 现在既支持主估值，也支持独立的 `market_implied_stage1_growth` 反推；现有 `implied_growth` 求解器仍只支持 `one_stage` 与 `two_stage`。
+`v0.4.0` 的 `three_stage` 现在既支持主估值，也支持独立的 `market_implied_stage1_growth` 反推；现有 `implied_growth` 求解器仍只支持 `one_stage` 与 `two_stage`。
 
 三阶段输入示例：
 
@@ -351,7 +351,7 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity -
 * 提供 `payload.market_inputs.market_price`，再结合 `shares_out` 与 `net_debt` 推导 EV
 * `payload.implied_growth.model` 支持 `one_stage` 与 `two_stage`
 
-`v0.3.0` 中，隐含增长求解器不支持 `three_stage`。
+`v0.4.0` 中，现有隐含增长求解器仍不支持 `three_stage`。
 
 单阶段示例：
 

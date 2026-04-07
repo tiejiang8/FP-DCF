@@ -7,7 +7,7 @@ user-invocable: true
 
 # FP-DCF
 
-Version: `v0.3.0`
+Version: `v0.4.0`
 
 ## Repository Workflow Notice
 
@@ -84,7 +84,7 @@ Minimum required values for a useful result:
 - `assumptions.pre_tax_cost_of_debt`
 - `fundamentals.fcff_anchor` or `fundamentals.ebit`
 
-Supported `valuation_model` values in `v0.3.0`:
+Supported `valuation_model` values in `v0.4.0`:
 
 - `steady_state_single_stage`
 - `two_stage`
@@ -248,7 +248,7 @@ Always return:
 - If `valuation_model=three_stage` is missing `stage1_growth_rate`, `stage1_years`, `stage2_end_growth_rate`, `stage2_years`, or `terminal_growth_rate`, fail with a clear error instead of falling back.
 - If `valuation_model` is unknown, fail with an error containing `unsupported valuation_model`; do not silently remap it to another model.
 - Do not silently degrade a requested `three_stage` valuation into `two_stage` or `steady_state_single_stage`.
-- Keep implied-growth scope unchanged in `v0.3.0`: only `one_stage` and `two_stage` are valid there.
+- Keep implied-growth scope unchanged in `v0.4.0`: only `one_stage` and `two_stage` are valid there.
 - Keep `market_implied_stage1_growth` separate from `implied_growth`. It is a one-variable `stage1_growth_rate` backsolve, not a multi-parameter calibration pass.
 - Reject `market_implied_stage1_growth` on `steady_state_single_stage` with an error containing `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`.
 - If the user wants single-stage market-implied growth, route that request through `payload.implied_growth.model=one_stage` instead.
