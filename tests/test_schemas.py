@@ -41,6 +41,7 @@ def test_sensitivity_heatmap_output_defaults_are_stable():
     assert result.market == "US"
     assert result.metric == "per_share_value"
     assert result.base_wacc is None
+    assert result.market_price is None
     assert result.wacc_values == []
     assert result.matrix == []
     assert result.diagnostics == []
@@ -56,6 +57,7 @@ def test_sensitivity_heatmap_summary_omits_grid_by_default():
         base_wacc=0.09,
         base_terminal_growth_rate=0.03,
         base_metric_value=100.0,
+        market_price=110.0,
         wacc_values=[0.08, 0.09],
         terminal_growth_values=[0.02, 0.03],
         matrix=[[90.0, 100.0], [80.0, 90.0]],
@@ -66,6 +68,7 @@ def test_sensitivity_heatmap_summary_omits_grid_by_default():
     summary = result.to_summary_dict(exclude_diagnostics={"a"})
 
     assert "grid" not in summary
+    assert summary["market_price"] == 110.0
     assert summary["wacc_axis"] == {"min": 0.08, "max": 0.09, "points": 2}
     assert summary["terminal_growth_axis"] == {"min": 0.02, "max": 0.03, "points": 2}
     assert summary["diagnostics"] == ["b"]

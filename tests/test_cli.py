@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from fp_dcf import cli
+from fp_dcf import ImpliedGrowthSummary, MarketInputsSummary
 from fp_dcf import SensitivityHeatmapOutput
 
 
@@ -489,6 +490,78 @@ def test_cli_embeds_sensitivity_and_artifact_path(tmp_path: Path, monkeypatch):
             str(chart_path.with_suffix(".png").resolve()),
         ],
     }
+
+
+def test_cli_passes_market_price_to_sensitivity_when_implied_growth_output_exists(
+    tmp_path: Path,
+    monkeypatch,
+):
+    input_path = tmp_path / "input.json"
+    output_path = tmp_path / "out.json"
+    input_path.write_text('{"ticker":"AAPL","market":"US"}', encoding="utf-8")
+
+    calls = {}
+
+    def fake_normalize_payload(payload, provider_override=None, *, cache_dir=None, force_refresh=None):
+        return payload
+
+    class _FakeResult:
+        def to_dict(self):
+            return {
+                "ticker": "AAPL",
+                "market": "US",
+                "valuation_model": "steady_state_single_stage",
+                "valuation": {"enterprise_value": 1.0},
+            }
+
+    def fake_build_implied_growth_output(payload, result):
+        return (
+            MarketInputsSummary(market_price=123.45),
+            ImpliedGrowthSummary(enabled=True, model="one_stage", success=True),
+        )
+
+    def fake_build(payload, **kwargs):
+        calls["market_price"] = kwargs["market_price"]
+        return SensitivityHeatmapOutput(
+            ticker="AAPL",
+            market="US",
+            valuation_model="steady_state_single_stage",
+            metric="per_share_value",
+            metric_label="Per Share Value",
+            currency="USD",
+            base_wacc=0.09,
+            base_terminal_growth_rate=0.03,
+            base_metric_value=100.0,
+            market_price=kwargs["market_price"],
+            wacc_values=[0.08, 0.09],
+            terminal_growth_values=[0.02, 0.03],
+            matrix=[[90.0, 100.0], [80.0, 90.0]],
+        )
+
+    def fake_render(heatmap, output_path_arg, *, title=None):
+        Path(output_path_arg).write_text("<svg/>", encoding="utf-8")
+        return Path(output_path_arg)
+
+    monkeypatch.setattr(cli, "normalize_payload", fake_normalize_payload)
+    monkeypatch.setattr(cli, "run_valuation", lambda payload: _FakeResult())
+    monkeypatch.setattr(cli, "build_implied_growth_output", fake_build_implied_growth_output)
+    monkeypatch.setattr(cli, "build_wacc_terminal_growth_sensitivity", fake_build)
+    monkeypatch.setattr(cli, "render_wacc_terminal_growth_heatmap", fake_render)
+
+    rc = cli.main(
+        [
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--pretty",
+        ]
+    )
+
+    assert rc == 0
+    assert calls["market_price"] == 123.45
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["sensitivity"]["market_price"] == 123.45
 
 
 def test_cli_generates_default_chart_path_when_not_supplied(tmp_path: Path, monkeypatch):

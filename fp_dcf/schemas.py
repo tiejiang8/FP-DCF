@@ -204,6 +204,7 @@ class SensitivityHeatmapOutput:
     base_wacc: float | None = None
     base_terminal_growth_rate: float | None = None
     base_metric_value: float | None = None
+    market_price: float | None = None
     wacc_values: list[float] = field(default_factory=list)
     terminal_growth_values: list[float] = field(default_factory=list)
     matrix: list[list[float | None]] = field(default_factory=list)
@@ -229,6 +230,7 @@ class SensitivityHeatmapOutput:
             "base_wacc": self.base_wacc,
             "base_terminal_growth_rate": self.base_terminal_growth_rate,
             "base_metric_value": self.base_metric_value,
+            "market_price": self.market_price,
             "wacc_axis": {
                 "min": self.wacc_values[0] if self.wacc_values else None,
                 "max": self.wacc_values[-1] if self.wacc_values else None,

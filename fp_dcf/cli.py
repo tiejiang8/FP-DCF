@@ -243,6 +243,9 @@ def main(argv: list[str] | None = None) -> int:
                 if requested_metric
                 else ["per_share_value", "equity_value", "enterprise_value"]
             )
+            market_price = None
+            if implied_growth_output is not None:
+                market_price = implied_growth_output[0].market_price
             sensitivity = None
             last_exc: Exception | None = None
             for metric in metric_candidates:
@@ -250,6 +253,7 @@ def main(argv: list[str] | None = None) -> int:
                     sensitivity = build_wacc_terminal_growth_sensitivity(
                         payload,
                         metric=metric,
+                        market_price=market_price,
                         wacc_range_bps=sensitivity_request["wacc_range_bps"],
                         wacc_step_bps=sensitivity_request["wacc_step_bps"],
                         growth_range_bps=sensitivity_request["growth_range_bps"],

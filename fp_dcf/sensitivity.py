@@ -123,6 +123,7 @@ def build_wacc_terminal_growth_sensitivity(
     payload: dict,
     *,
     metric: str = "per_share_value",
+    market_price: float | None = None,
     wacc_values: list[float] | None = None,
     terminal_growth_values: list[float] | None = None,
     wacc_range_bps: int = 200,
@@ -163,13 +164,15 @@ def build_wacc_terminal_growth_sensitivity(
 
     valuation_model = str(base_output.valuation_model or "steady_state_single_stage")
     high_growth_rate = _clip_rate(
-        _coerce_float(assumptions.get("high_growth_rate")),
+        _coerce_float(assumptions.get("stage1_growth_rate") or assumptions.get("high_growth_rate")),
         low=-0.5,
         high=1.0,
     )
     if high_growth_rate is None:
         high_growth_rate = 0.10
-    high_growth_years = int(_coerce_float(assumptions.get("high_growth_years")) or 5)
+    high_growth_years = int(
+        _coerce_float(assumptions.get("stage1_years") or assumptions.get("high_growth_years")) or 5
+    )
 
     wacc_axis = (
         sorted({round(float(value), 6) for value in wacc_values})
@@ -242,6 +245,7 @@ def build_wacc_terminal_growth_sensitivity(
         base_wacc=base_wacc,
         base_terminal_growth_rate=base_growth,
         base_metric_value=base_metric_value,
+        market_price=market_price,
         wacc_values=wacc_axis,
         terminal_growth_values=growth_axis,
         matrix=matrix,
