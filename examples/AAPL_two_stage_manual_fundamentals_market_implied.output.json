@@ -6,7 +6,7 @@
   "effective_valuation_model": "two_stage",
   "degraded": false,
   "currency": "USD",
-  "as_of_date": "2026-04-07",
+  "as_of_date": "2026-04-11",
   "tax": {
     "effective_tax_rate": 0.19,
     "effective_tax_rate_source": "yahoo:tax_rate",
@@ -28,7 +28,7 @@
   "capital_structure": {
     "equity_weight": 0.92,
     "debt_weight": 0.08,
-    "source": "yahoo:market_value"
+    "source": "yahoo:market_value_using_total_debt"
   },
   "fcff": {
     "anchor": 103000000000.0,
@@ -65,7 +65,7 @@
   },
   "diagnostics": [
     "provider_normalization:yahoo:A",
-    "provider_cache_hit:yahoo",
+    "provider_cache_miss:yahoo",
     "tax_rate_paths_are_separated",
     "fcff_path_selected:manual_anchor",
     "valuation_model_two_stage"
@@ -77,6 +77,7 @@
     "base_wacc": 0.082102,
     "base_terminal_growth_rate": 0.03,
     "base_metric_value": 202.01215775259024,
+    "market_price": null,
     "wacc_axis": {
       "min": 0.062102,
       "max": 0.102102,
