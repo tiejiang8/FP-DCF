@@ -47,6 +47,46 @@ def _install_fake_yahoo_provider(fetch_values: list[dict] | None = None):
     return state
 
 
+def _install_fake_akshare_baostock_provider(fetch_values: list[dict] | None = None):
+    fake_provider = types.ModuleType("fp_dcf.providers.akshare_baostock")
+    state = {"fetch_calls": 0}
+
+    def fake_fetch(ticker_symbol, *, market="CN", statement_frequency="A"):
+        state["fetch_calls"] += 1
+        if fetch_values:
+            snapshot = fetch_values[min(state["fetch_calls"] - 1, len(fetch_values) - 1)]
+        else:
+            snapshot = {
+                "provider": "akshare_baostock",
+                "normalized_symbol": str(ticker_symbol).upper(),
+                "assumptions": {"risk_free_rate": 0.025, "beta": 0.9},
+                "fundamentals": {"ebit": 120.0},
+            }
+        out = dict(snapshot)
+        out.setdefault("provider", "akshare_baostock")
+        out.setdefault("normalized_symbol", str(ticker_symbol).upper())
+        out.setdefault("assumptions", {})
+        out.setdefault("fundamentals", {})
+        return out
+
+    def fake_enrich(payload, *, snapshot=None):
+        out = dict(payload)
+        provider_snapshot = snapshot or fake_fetch(payload.get("ticker"))
+        out["provider"] = provider_snapshot.get("provider", "akshare_baostock")
+        out["normalized_symbol"] = provider_snapshot.get("normalized_symbol")
+        out["assumptions"] = dict(provider_snapshot.get("assumptions", {}))
+        out["fundamentals"] = dict(provider_snapshot.get("fundamentals", {}))
+        out["_prefill_diagnostics"] = [
+            f"provider_normalization:akshare_baostock:{payload.get('statement_frequency', 'A')}"
+        ]
+        return out
+
+    fake_provider.fetch_akshare_baostock_snapshot = fake_fetch
+    fake_provider.enrich_payload_from_akshare_baostock = fake_enrich
+    sys.modules["fp_dcf.providers.akshare_baostock"] = fake_provider
+    return state
+
+
 def test_normalize_payload_uses_yahoo_provider_when_core_inputs_missing(tmp_path: Path):
     _install_fake_yahoo_provider()
     try:
@@ -59,6 +99,23 @@ def test_normalize_payload_uses_yahoo_provider_when_core_inputs_missing(tmp_path
     assert out["fundamentals"]["ebit"] == 100.0
     assert "provider_normalization:yahoo:A" in out["_prefill_diagnostics"]
     assert "provider_cache_miss:yahoo" in out["_prefill_diagnostics"]
+
+
+def test_normalize_payload_supports_explicit_akshare_baostock_provider(tmp_path: Path):
+    _install_fake_akshare_baostock_provider()
+    try:
+        out = normalize_payload(
+            {"ticker": "600519.SH", "market": "CN", "provider": "akshare_baostock"},
+            cache_dir=tmp_path,
+        )
+    finally:
+        sys.modules.pop("fp_dcf.providers.akshare_baostock", None)
+
+    assert out["provider"] == "akshare_baostock"
+    assert out["assumptions"]["risk_free_rate"] == 0.025
+    assert out["fundamentals"]["ebit"] == 120.0
+    assert "provider_normalization:akshare_baostock:A" in out["_prefill_diagnostics"]
+    assert "provider_cache_miss:akshare_baostock" in out["_prefill_diagnostics"]
 
 
 def test_normalize_payload_skips_provider_when_core_inputs_present():
@@ -138,6 +195,44 @@ def test_normalize_payload_force_refresh_bypasses_cached_snapshot(tmp_path: Path
     assert out_first["fundamentals"]["ebit"] == 100.0
     assert out_second["fundamentals"]["ebit"] == 200.0
     assert "provider_cache_refresh:yahoo" in out_second["_prefill_diagnostics"]
+
+
+def test_normalize_payload_falls_back_from_yahoo_to_akshare_baostock_for_cn(tmp_path: Path):
+    fake_yahoo = types.ModuleType("fp_dcf.providers.yahoo")
+
+    def fake_fetch_yahoo(ticker_symbol, *, market="CN", statement_frequency="A"):
+        raise RuntimeError("yfinance unreachable")
+
+    fake_yahoo.fetch_yahoo_snapshot = fake_fetch_yahoo
+    fake_yahoo.enrich_payload_from_yahoo = lambda payload, *, snapshot=None: payload
+    sys.modules["fp_dcf.providers.yahoo"] = fake_yahoo
+    _install_fake_akshare_baostock_provider()
+    try:
+        out = normalize_payload({"ticker": "600519.SH", "market": "CN"}, cache_dir=tmp_path)
+    finally:
+        sys.modules.pop("fp_dcf.providers.yahoo", None)
+        sys.modules.pop("fp_dcf.providers.akshare_baostock", None)
+
+    assert out["provider"] == "akshare_baostock"
+    assert "provider_fallback:yahoo->akshare_baostock" in out["_prefill_diagnostics"]
+    assert "provider_cache_miss:akshare_baostock" in out["_prefill_diagnostics"]
+    assert "yahoo_unavailable_used_akshare_baostock_fallback" in out["_prefill_warnings"]
+
+
+def test_normalize_payload_does_not_fall_back_from_yahoo_for_us(tmp_path: Path):
+    fake_yahoo = types.ModuleType("fp_dcf.providers.yahoo")
+
+    def fake_fetch_yahoo(ticker_symbol, *, market="US", statement_frequency="A"):
+        raise RuntimeError("yfinance unreachable")
+
+    fake_yahoo.fetch_yahoo_snapshot = fake_fetch_yahoo
+    fake_yahoo.enrich_payload_from_yahoo = lambda payload, *, snapshot=None: payload
+    sys.modules["fp_dcf.providers.yahoo"] = fake_yahoo
+    try:
+        with pytest.raises(RuntimeError, match="yfinance unreachable"):
+            normalize_payload({"ticker": "AAPL", "market": "US"}, cache_dir=tmp_path)
+    finally:
+        sys.modules.pop("fp_dcf.providers.yahoo", None)
 
 
 def test_yahoo_snapshot_uses_total_debt_for_capital_structure_weights(monkeypatch):

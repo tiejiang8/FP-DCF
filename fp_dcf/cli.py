@@ -142,7 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", default="-", help="Path to write output JSON. Use - to write to stdout.")
     parser.add_argument(
         "--provider",
-        choices=["yahoo"],
+        choices=["yahoo", "akshare_baostock"],
         default=None,
         help="Optionally enrich missing inputs using a provider before valuation.",
     )

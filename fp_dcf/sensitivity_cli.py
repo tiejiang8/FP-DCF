@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--provider",
-        choices=["yahoo"],
+        choices=["yahoo", "akshare_baostock"],
         default=None,
         help="Optionally enrich missing inputs using a provider before valuation.",
     )

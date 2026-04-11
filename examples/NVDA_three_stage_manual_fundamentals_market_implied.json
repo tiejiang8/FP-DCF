@@ -7,10 +7,10 @@
   "normalization": {
     "provider": "yahoo",
     "use_cache": true,
-    "refresh": true
+    "refresh": false
   },
   "sensitivity": {
-    "enabled": false
+    "enabled": true
   },
   "assumptions": {
     "effective_tax_rate": 0.17,

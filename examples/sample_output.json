@@ -86,7 +86,7 @@
     "model": "one_stage",
     "solver": "closed_form",
     "success": true,
-    "enterprise_value_market": 3533500000000.0,
+    "enterprise_value_market": 3549000000000.0,
     "fcff_anchor": 106216000000.0,
     "wacc": 0.0912624,
     "one_stage": {
@@ -108,6 +108,7 @@
     "base_wacc": 0.091262,
     "base_terminal_growth_rate": 0.03,
     "base_metric_value": 112.24525194214796,
+    "market_price": 226.0,
     "wacc_axis": {
       "min": 0.071262,
       "max": 0.111262,

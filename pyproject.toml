@@ -9,12 +9,14 @@ description = "First-principles DCF skill scaffold for LLM agents and quantitati
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "akshare>=1.18.54",
+  "baostock>=0.8.9",
   "numpy>=1.26",
   "pandas>=2.2",
   "yfinance>=0.2.54",
   "matplotlib>=3.8",
 ]
-keywords = ["dcf", "valuation", "finance", "llm", "mcp", "yfinance"]
+keywords = ["dcf", "valuation", "finance", "llm", "mcp", "yfinance", "akshare", "baostock"]
 
 [project.optional-dependencies]
 dev = [

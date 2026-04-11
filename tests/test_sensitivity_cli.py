@@ -89,3 +89,9 @@ def test_sensitivity_cli_writes_json_and_renders_chart(tmp_path: Path, monkeypat
     assert payload["ticker"] == "AAPL"
     assert payload["base_metric_value"] == 100.0
     assert output_path.read_text(encoding="utf-8") == "<svg/>"
+
+
+def test_sensitivity_cli_parser_accepts_akshare_baostock_provider():
+    parser = sensitivity_cli.build_parser()
+    args = parser.parse_args(["--provider", "akshare_baostock"])
+    assert args.provider == "akshare_baostock"

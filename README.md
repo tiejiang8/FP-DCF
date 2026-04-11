@@ -56,7 +56,7 @@ Unlike many open-source DCF scripts, FP-DCF:
 * implied growth (`one_stage` / `two_stage` only; the existing `implied_growth` block still does not support `three_stage`)
 * `market_implied_stage1_growth` backsolve for `two_stage` and `three_stage`
 * `WACC x Terminal Growth` sensitivity heatmaps
-* Yahoo-backed normalization with local cache
+* provider-backed normalization with Yahoo plus CN fallback via AkShare + BaoStock
 * machine-readable diagnostics for downstream tools
 * explicit `requested_valuation_model` / `effective_valuation_model` output with no silent fallback on unknown `valuation_model`
 
@@ -162,7 +162,7 @@ For steady-state single-stage DCF:
 * prefer `NOPAT + ROIC + reinvestment` when the required drivers are available
 * fall back to normalized historical `FCFF` only when the operating-driver path is incomplete
 * `assumptions.fcff_anchor_mode` defaults to `latest` and also supports `manual`, `three_period_average`, and `reconciled_average`
-* Yahoo-backed normalization exposes only the minimal historical series needed for those modes, using `date:value` dictionaries
+* provider-backed normalization exposes only the minimal historical series needed for those modes, using `date:value` dictionaries
 
 ### 4. Market-value-aware WACC
 
@@ -207,6 +207,27 @@ JSON
 
 python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty
 ```
+
+For China A-shares, you can also choose the CN-friendly provider path explicitly:
+
+```bash
+cat > /tmp/fp_dcf_cn_input.json <<'JSON'
+{
+  "ticker": "600519.SH",
+  "market": "CN",
+  "provider": "akshare_baostock",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.025
+  }
+}
+JSON
+
+python3 scripts/run_dcf.py --input /tmp/fp_dcf_cn_input.json --pretty
+```
+
+When `market="CN"` and Yahoo normalization fails, FP-DCF automatically falls back to `akshare_baostock`. In that path, AkShare supplies statement data and BaoStock supplies price history and the latest close.
 
 ## Valuation models
 
@@ -510,7 +531,7 @@ Examples:
 
 ## Provider cache
 
-Yahoo-backed normalization uses a local cache by default so repeated runs do not re-fetch the same provider snapshot every time.
+Provider-backed normalization uses a local cache by default so repeated runs do not re-fetch the same provider snapshot every time.
 
 Default cache path:
 
@@ -518,7 +539,7 @@ Default cache path:
 ~/.cache/fp-dcf
 ```
 
-To force a fresh Yahoo pull and overwrite the cached snapshot for that request shape:
+To force a fresh provider pull and overwrite the cached snapshot for that request shape:
 
 ```bash
 python3 scripts/run_dcf.py --input /tmp/fp_dcf_yahoo_input.json --pretty --refresh-provider
@@ -548,6 +569,10 @@ Provider-backed runs also emit cache diagnostics such as:
 * `provider_cache_miss:yahoo`
 * `provider_cache_hit:yahoo`
 * `provider_cache_refresh:yahoo`
+* `provider_cache_miss:akshare_baostock`
+* `provider_cache_hit:akshare_baostock`
+* `provider_cache_refresh:akshare_baostock`
+* `provider_fallback:yahoo->akshare_baostock`
 
 ## Structured output direction
 
@@ -657,6 +682,8 @@ python3 -m pip install .
 
 Current base dependencies:
 
+* `akshare`
+* `baostock`
 * `numpy`
 * `pandas`
 * `yfinance`
@@ -686,9 +713,10 @@ FP_DCF_RUN_YAHOO_TESTS=1 pytest -q tests/test_yahoo_integration.py
 ## Current limitations
 
 * Yahoo-backed normalization depends on provider field quality and availability.
+* The `akshare_baostock` path currently targets `market=CN` and does not replace Yahoo for US/HK tickers.
 * The provider cache does not yet support TTL or staleness policies.
 * Financial-sector companies are not yet handled by a dedicated valuation path.
-* Yahoo is the only live normalization provider currently implemented.
+* Live normalization providers now include Yahoo plus a CN-specific `akshare_baostock` fallback path.
 
 ## Contributing
 

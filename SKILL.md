@@ -1,6 +1,6 @@
 ---
 name: "fp-dcf"
-description: "Estimate intrinsic value with a first-principles DCF from structured JSON or Yahoo-backed ticker input, and return auditable FCFF, WACC, and per-share value output."
+description: "Estimate intrinsic value with a first-principles DCF from structured JSON or provider-backed ticker input, and return auditable FCFF, WACC, and per-share value output."
 metadata: {"openclaw":{"emoji":"📉","homepage":"https://github.com/tiejiang8/FP-DCF","requires":{"anyBins":["python3","python"]}}}
 user-invocable: true
 ---
@@ -24,7 +24,7 @@ This repository is executable when installed as a skill because it includes a co
 - Primary runner: `{baseDir}/scripts/run_dcf.py`
 - Python module entrypoint: `python3 -m fp_dcf.cli`
 - Sample input: `{baseDir}/examples/sample_input.json`
-- Base Python dependencies for the default one-click path: `numpy`, `pandas`, `yfinance`, `matplotlib`
+- Base Python dependencies for the default one-click path: `akshare`, `baostock`, `numpy`, `pandas`, `yfinance`, `matplotlib`
 
 Preferred execution pattern:
 
@@ -41,7 +41,7 @@ If the runtime supports stdin piping, this also works:
 python3 {baseDir}/scripts/run_dcf.py --pretty < /path/to/input.json
 ```
 
-Yahoo-backed normalization uses a local provider cache by default. To force a fresh pull from Yahoo for the current request, run:
+Provider-backed normalization uses a local provider cache by default. To force a fresh pull for the current request, run:
 
 ```bash
 python3 {baseDir}/scripts/run_dcf.py --input /path/to/input.json --pretty --refresh-provider
@@ -113,9 +113,10 @@ If `fundamentals.fcff_anchor` is not supplied, the runner computes it from:
 - `capex`
 - `delta_nwc` or a fallback working-capital field
 
-If those structured fields are mostly missing, the runner can auto-normalize them from Yahoo when:
+If those structured fields are mostly missing, the runner can auto-normalize them from a live provider when:
 
 - `provider` is set to `yahoo`, or
+- `provider` is set to `akshare_baostock` for `market=CN`, or
 - the payload has a `ticker` but is missing core DCF inputs
 
 The minimal provider-backed input shape is:
@@ -132,6 +133,23 @@ The minimal provider-backed input shape is:
   }
 }
 ```
+
+For China A-shares, this explicit provider shape is also supported:
+
+```json
+{
+  "ticker": "600519.SH",
+  "market": "CN",
+  "provider": "akshare_baostock",
+  "statement_frequency": "A",
+  "valuation_model": "steady_state_single_stage",
+  "assumptions": {
+    "terminal_growth_rate": 0.025
+  }
+}
+```
+
+When `market="CN"` and Yahoo normalization fails, FP-DCF automatically falls back to `akshare_baostock`. In that path, AkShare provides statement data and BaoStock provides price history and the latest close.
 
 The payload can also drive normalization behavior through an optional `normalization` object:
 
@@ -166,7 +184,7 @@ Sensitivity output is enabled by default. To disable it for a specific run:
 - pass `--no-sensitivity`, or
 - set `sensitivity.enabled=false`
 
-Live Yahoo-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
+Live provider-backed runs are inherently date-sensitive. Do not hard-code expected valuation numbers when validating this path; validate the presence and plausibility of the returned fields instead.
 
 ## Core Rules
 
@@ -263,6 +281,7 @@ Read only what you need:
 - [examples/sample_output.json](./examples/sample_output.json) for the intended output contract
 - [examples/sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json) for a minimal two-stage market-implied stage-1 example
 - [examples/sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json) for a minimal three-stage market-implied stage-1 example
+- [examples/cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json) for a CN provider-backed single-stage example
 
 ## Quality Bar
 

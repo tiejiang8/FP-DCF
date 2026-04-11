@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 
-_PROVIDER_CACHE_VERSION = 2
+_PROVIDER_CACHE_VERSION = 3
 
 
 def _has_core_inputs(payload: dict) -> bool:
@@ -109,6 +109,88 @@ def _append_prefill_diagnostic(payload: dict, diagnostic: str) -> None:
     payload["_prefill_diagnostics"] = diagnostics
 
 
+def _append_prefill_warning(payload: dict, warning: str) -> None:
+    warnings = list(payload.get("_prefill_warnings", []))
+    if warning not in warnings:
+        warnings.append(warning)
+    payload["_prefill_warnings"] = warnings
+
+
+def _is_cn_fallback_candidate(payload: dict) -> bool:
+    market = str(payload.get("market") or "").strip().upper()
+    ticker = str(payload.get("ticker") or "").strip().upper()
+    if market == "CN":
+        return True
+    return ticker.endswith((".SS", ".SH", ".SZ", ".BJ"))
+
+
+def _provider_handlers(provider_name: str):
+    if provider_name == "yahoo":
+        from .providers.yahoo import enrich_payload_from_yahoo, fetch_yahoo_snapshot
+
+        return fetch_yahoo_snapshot, enrich_payload_from_yahoo
+
+    if provider_name == "akshare_baostock":
+        from .providers.akshare_baostock import (
+            enrich_payload_from_akshare_baostock,
+            fetch_akshare_baostock_snapshot,
+        )
+
+        return fetch_akshare_baostock_snapshot, enrich_payload_from_akshare_baostock
+
+    raise ValueError(f"Unsupported provider: {provider_name}")
+
+
+def _normalize_with_provider(
+    provider_name: str,
+    payload: dict,
+    *,
+    cache_dir: str | os.PathLike[str] | None = None,
+    force_refresh: bool | None = None,
+) -> dict:
+    normalization = payload.get("normalization") or {}
+    if not isinstance(normalization, dict):
+        normalization = {}
+
+    fetch_snapshot, enrich_payload = _provider_handlers(provider_name)
+
+    use_cache = _normalize_bool(normalization.get("use_cache"), default=True)
+    effective_cache_dir = cache_dir or normalization.get("cache_dir")
+    should_refresh = (
+        force_refresh
+        if force_refresh is not None
+        else _normalize_bool(normalization.get("refresh"), default=False)
+    )
+
+    snapshot = None
+    cache_status = "bypass"
+    cache_path = _provider_cache_path(provider_name, payload, effective_cache_dir)
+    if use_cache and not should_refresh:
+        snapshot = _load_provider_snapshot(cache_path)
+        if snapshot is not None:
+            cache_status = "hit"
+
+    if snapshot is None:
+        snapshot = fetch_snapshot(
+            payload.get("ticker"),
+            market=payload.get("market", "US"),
+            statement_frequency=payload.get("statement_frequency") or "A",
+        )
+        if use_cache:
+            _write_provider_snapshot(cache_path, snapshot)
+            cache_status = "refresh" if should_refresh else "miss"
+
+    normalized = enrich_payload(payload, snapshot=snapshot)
+    if use_cache:
+        _append_prefill_diagnostic(normalized, f"provider_cache_{cache_status}:{provider_name}")
+    elif should_refresh:
+        _append_prefill_diagnostic(
+            normalized,
+            f"provider_cache_disabled_explicit_refresh:{provider_name}",
+        )
+    return normalized
+
+
 def normalize_payload(
     payload: dict,
     provider_override: str | None = None,
@@ -136,40 +218,29 @@ def normalize_payload(
         return out
 
     provider_name = str(provider).strip().lower()
-    if provider_name == "yahoo":
-        from .providers.yahoo import enrich_payload_from_yahoo, fetch_yahoo_snapshot
-
-        use_cache = _normalize_bool(normalization.get("use_cache"), default=True)
-        effective_cache_dir = cache_dir or normalization.get("cache_dir")
-        should_refresh = (
-            force_refresh
-            if force_refresh is not None
-            else _normalize_bool(normalization.get("refresh"), default=False)
+    try:
+        return _normalize_with_provider(
+            provider_name,
+            out,
+            cache_dir=cache_dir,
+            force_refresh=force_refresh,
         )
+    except Exception as exc:
+        if provider_name != "yahoo" or not _is_cn_fallback_candidate(out):
+            raise
 
-        snapshot = None
-        cache_status = "bypass"
-        cache_path = _provider_cache_path(provider_name, out, effective_cache_dir)
-        if use_cache and not should_refresh:
-            snapshot = _load_provider_snapshot(cache_path)
-            if snapshot is not None:
-                cache_status = "hit"
-
-        if snapshot is None:
-            snapshot = fetch_yahoo_snapshot(
-                out.get("ticker"),
-                market=out.get("market", "US"),
-                statement_frequency=out.get("statement_frequency") or "A",
+        try:
+            normalized = _normalize_with_provider(
+                "akshare_baostock",
+                out,
+                cache_dir=cache_dir,
+                force_refresh=force_refresh,
             )
-            if use_cache:
-                _write_provider_snapshot(cache_path, snapshot)
-                cache_status = "refresh" if should_refresh else "miss"
+        except Exception as fallback_exc:
+            raise RuntimeError(
+                f"Yahoo normalization failed ({exc}) and akshare_baostock fallback failed ({fallback_exc})"
+            ) from fallback_exc
 
-        normalized = enrich_payload_from_yahoo(out, snapshot=snapshot)
-        if use_cache:
-            _append_prefill_diagnostic(normalized, f"provider_cache_{cache_status}:yahoo")
-        elif should_refresh:
-            _append_prefill_diagnostic(normalized, "provider_cache_disabled_explicit_refresh:yahoo")
+        _append_prefill_diagnostic(normalized, "provider_fallback:yahoo->akshare_baostock")
+        _append_prefill_warning(normalized, "yahoo_unavailable_used_akshare_baostock_fallback")
         return normalized
-
-    raise ValueError(f"Unsupported provider: {provider}")

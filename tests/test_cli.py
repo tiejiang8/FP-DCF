@@ -409,6 +409,12 @@ def test_cli_passes_cache_options_to_normalizer(tmp_path: Path, monkeypatch):
     }
 
 
+def test_cli_parser_accepts_akshare_baostock_provider():
+    parser = cli.build_parser()
+    args = parser.parse_args(["--provider", "akshare_baostock"])
+    assert args.provider == "akshare_baostock"
+
+
 def test_cli_embeds_sensitivity_and_artifact_path(tmp_path: Path, monkeypatch):
     input_path = tmp_path / "input.json"
     output_path = tmp_path / "out.json"
