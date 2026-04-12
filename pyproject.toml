@@ -21,7 +21,7 @@ keywords = ["dcf", "valuation", "finance", "llm", "mcp", "yfinance", "akshare", 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
-  "ruff>=0.4",
+  "ruff>=0.15.10",
 ]
 # Backward-compatible alias. The default runtime now includes matplotlib
 # because the main CLI renders PNG/SVG sensitivity charts by default.
