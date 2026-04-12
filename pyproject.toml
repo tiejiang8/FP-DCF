@@ -9,7 +9,7 @@ description = "First-principles DCF skill scaffold for LLM agents and quantitati
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "akshare>=1.18.54",
+  "akshare>=1.18.55",
   "baostock>=0.8.9",
   "numpy>=1.26",
   "pandas>=2.2",
