@@ -79,6 +79,96 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 }
 ```
 
+## 数据字典
+
+`fp-dcf` 返回的标准 JSON 来自 `ValuationOutput`。当主 CLI 开启相应功能时，还会额外补充 `market_inputs`、`sensitivity` 和 `artifacts`。
+
+### 顶层输出
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `ticker` | string | 本次运行使用的 ticker。 |
+| `market` | string | 市场代码，例如 `US` 或 `CN`。 |
+| `valuation_model` | string | 实际执行的估值模型。 |
+| `requested_valuation_model` | string \| null | 在默认化或校验前，用户请求的模型。 |
+| `effective_valuation_model` | string \| null | 校验与默认处理后真正执行的模型。 |
+| `degraded` | bool | 当本次运行存在结构性降级时为 `true`。 |
+| `degradation_reasons` | list[string] | 机器可读的降级原因键。 |
+| `currency` | string \| null | 报告币种（若可得）。 |
+| `as_of_date` | string \| null | 输出附带的估值日期。 |
+| `tax` | object | 嵌套的 `TaxAssumptions` 块。 |
+| `wacc_inputs` | object | 嵌套的 `WACCInputs` 块。 |
+| `capital_structure` | object | 嵌套的 `CapitalStructure` 块。 |
+| `fcff` | object | 嵌套的 `FCFFSummary` 块。 |
+| `valuation` | object | 嵌套的 `ValuationSummary` 块。 |
+| `market_implied_growth` | object \| null | 嵌套的 `MarketImpliedGrowthOutput` 块，未开启时会省略。 |
+| `diagnostics` | list[string] | 机器可读的事件代码。 |
+| `warnings` | list[string] | 非致命的质量、默认化或 fallback 警告。 |
+
+### 嵌套块
+
+* `tax`（`TaxAssumptions`）：`effective_tax_rate`、`effective_tax_rate_source`、`marginal_tax_rate`、`marginal_tax_rate_source`
+* `wacc_inputs`（`WACCInputs`）：`risk_free_rate`、`risk_free_rate_source`、`equity_risk_premium`、`equity_risk_premium_source`、`beta`、`beta_source`、`cost_of_equity`、`pre_tax_cost_of_debt`、`pre_tax_cost_of_debt_source`、`wacc`
+* `capital_structure`（`CapitalStructure`）：`equity_weight`、`debt_weight`、`source`
+* `fcff`（`FCFFSummary`）：`anchor`、`anchor_method`、`selected_path`、`anchor_ebiat_path`、`anchor_cfo_path`、`ebiat_path_available`、`cfo_path_available`、`after_tax_interest`、`after_tax_interest_source`、`reconciliation_gap`、`reconciliation_gap_pct`、`anchor_mode`、`anchor_observation_count`、`delta_nwc_source`、`last_report_period`
+* `valuation`（`ValuationSummary`）：`enterprise_value`、`equity_value`、`per_share_value`、`terminal_growth_rate`、`terminal_growth_rate_effective`、`present_value_stage1`、`present_value_stage2`、`present_value_terminal`、`terminal_value`、`terminal_value_share`、`explicit_forecast_years`、`stage1_years`、`stage2_years`、`stage2_decay_mode`
+* `market_implied_growth`（`MarketImpliedGrowthOutput`）：`enabled`、`success`、`valuation_model`、`solved_field`、`solved_value`、`solver_used`、`lower_bound`、`upper_bound`、`iterations`、`residual`、`market_price`、`market_enterprise_value`、`base_case_per_share_value`、`base_case_enterprise_value`、`message`
+* `market_inputs`（`MarketInputsSummary`，在 market-implied growth 存在时由主 CLI 补充）：`enterprise_value_market`、`enterprise_value_market_source`、`equity_value_market`、`market_price`、`market_price_source`、`shares_out`、`shares_out_source`、`net_debt`、`net_debt_source`
+* `sensitivity` 摘要（`SensitivityHeatmapOutput.to_summary_dict()`）：`metric`、`metric_label`、`base_wacc`、`base_terminal_growth_rate`、`base_metric_value`、`market_price`、`wacc_axis`、`terminal_growth_axis`、`diagnostics`、`warnings`，当 `sensitivity.detail=true` 时还会包含 `grid`
+* `artifacts`（图表渲染成功时由主 CLI 补充）：`sensitivity_heatmap_path`、`sensitivity_heatmap_svg_path`
+
+### 独立 sensitivity CLI
+
+单独的 `fp-dcf-sensitivity` 命令会返回完整的 `SensitivityHeatmapOutput` 对象，包含：
+
+* `ticker`
+* `market`
+* `valuation_model`
+* `metric`
+* `metric_label`
+* `currency`
+* `as_of_date`
+* `base_wacc`
+* `base_terminal_growth_rate`
+* `base_metric_value`
+* `market_price`
+* `wacc_values`
+* `terminal_growth_values`
+* `matrix`
+* `diagnostics`
+* `warnings`
+
+### 常见代码
+
+`diagnostics` 和 `warnings` 都是只追加的机器可读字符串数组，常见示例包括：
+
+* `valuation_model_steady_state_single_stage`
+* `valuation_model_two_stage`
+* `valuation_model_three_stage`
+* `fcff_path_selected:cfo`
+* `fcff_path_selected:ebiat`
+* `provider_cache_hit:yahoo`
+* `provider_cache_miss:akshare_baostock`
+* `provider_fallback:yahoo->akshare_baostock`
+* `valuation_model_missing_defaulted_to_steady_state_single_stage`
+* `capital_structure_weights_defaulted_to_0.7_0.3`
+* `delta_nwc_missing_assumed_zero`
+* `shares_out_missing_per_share_value_unavailable`
+
+当前的降级原因键包括：
+
+* `degraded_due_to_default_capital_structure`
+* `degraded_due_to_assumed_zero_delta_nwc`
+* `degraded_due_to_ebiat_only_fcff_anchor`
+* `degraded_due_to_missing_shares_out`
+
+### 写入磁盘的文件
+
+* 主 CLI 会把输出 JSON 写到 `--output`，或直接写到 stdout。
+* 当 sensitivity 开启时，主 CLI 还会写出 `*.sensitivity.svg` 和 `*.sensitivity.png`。
+* provider-backed normalization 默认把缓存快照写到 `~/.cache/fp-dcf`，如果设置了 `XDG_CACHE_HOME`，则写到 `XDG_CACHE_HOME/fp-dcf`。
+* 独立的 sensitivity CLI 会把 JSON 摘要写到 `--json-output`，如果提供了 `--output`，则还会写出图表文件。
+
 参考：
 
 * [sample_input.json](./examples/sample_input.json)
@@ -91,6 +181,9 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 * [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
 * [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
 * [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
+* `300347.SZ` 单阶段市场隐含增长示例：[输入](./examples/300347.sz_market_implied_growth_single_stage.json)，[输出](./examples/300347.sz_market_implied_growth_single_stage.output.json)，[PNG](./examples/300347.sz_market_implied_growth_single_stage.output.sensitivity.png)，[SVG](./examples/300347.sz_market_implied_growth_single_stage.output.sensitivity.svg)
+* `300347.SZ` 两阶段市场隐含增长示例：[输入](./examples/300347.sz_market_implied_growth_two_stage.json)，[输出](./examples/300347.sz_market_implied_growth_two_stage.output.json)，[PNG](./examples/300347.sz_market_implied_growth_two_stage.output.sensitivity.png)，[SVG](./examples/300347.sz_market_implied_growth_two_stage.output.sensitivity.svg)
+* `300347.SZ` 三阶段市场隐含增长示例：[输入](./examples/300347.sz_market_implied_growth_three_stage.json)，[输出](./examples/300347.sz_market_implied_growth_three_stage.output.json)，[PNG](./examples/300347.sz_market_implied_growth_three_stage.output.sensitivity.png)，[SVG](./examples/300347.sz_market_implied_growth_three_stage.output.sensitivity.svg)
 * [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
 * [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
 * [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
@@ -233,7 +326,7 @@ python3 scripts/run_dcf.py --input /tmp/fp_dcf_cn_input.json --pretty
 
 ## 估值模型
 
-FP-DCF `v0.4.0` 在主估值链中支持以下 `valuation_model`：
+FP-DCF `v0.5.1` 在主估值链中支持以下 `valuation_model`：
 
 * `steady_state_single_stage`
 * `two_stage`

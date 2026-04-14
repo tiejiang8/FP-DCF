@@ -7,7 +7,7 @@ user-invocable: true
 
 # FP-DCF
 
-Version: `v0.4.0`
+Version: `v0.5.1`
 
 ## Repository Workflow Notice
 
@@ -84,7 +84,7 @@ Minimum required values for a useful result:
 - `assumptions.pre_tax_cost_of_debt`
 - `fundamentals.fcff_anchor` or `fundamentals.ebit`
 
-Supported `valuation_model` values in `v0.4.0`:
+Supported `valuation_model` values in `v0.5.1`:
 
 - `steady_state_single_stage`
 - `two_stage`
@@ -271,7 +271,7 @@ Always return:
 - If `valuation_model=three_stage` is missing `stage1_growth_rate`, `stage1_years`, `stage2_end_growth_rate`, `stage2_years`, or `terminal_growth_rate`, fail with a clear error instead of falling back.
 - If `valuation_model` is unknown, fail with an error containing `unsupported valuation_model`; do not silently remap it to another model.
 - Do not silently degrade a requested `three_stage` valuation into `two_stage` or `steady_state_single_stage`.
-- Keep implied-growth scope unchanged in `v0.4.0`: only `one_stage` and `two_stage` are valid there.
+- Keep the market-implied growth contract stable in `v0.5.1`: `market_implied_growth` remains the only formal market-implied block.
 - Keep `market_implied_growth` as the only formal market-implied block and derive the solved field from `valuation_model`.
 - Reject legacy market-implied inputs with explicit errors.
 - If the user wants single-stage market-implied growth, route that request through `payload.market_implied_growth.enabled=true` and let `valuation_model=steady_state_single_stage` determine the solved field.
@@ -287,6 +287,9 @@ Read only what you need:
 - [examples/sample_input_market_implied_growth_single_stage.json](./examples/sample_input_market_implied_growth_single_stage.json) for a minimal single-stage market-implied growth example
 - [examples/sample_input_market_implied_growth_two_stage.json](./examples/sample_input_market_implied_growth_two_stage.json) for a minimal two-stage market-implied growth example
 - [examples/sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json) for a minimal three-stage market-implied growth example
+- [examples/300347.sz_market_implied_growth_single_stage.json](./examples/300347.sz_market_implied_growth_single_stage.json) and [examples/300347.sz_market_implied_growth_single_stage.output.json](./examples/300347.sz_market_implied_growth_single_stage.output.json) for a real 300347.SZ single-stage market-implied demo
+- [examples/300347.sz_market_implied_growth_two_stage.json](./examples/300347.sz_market_implied_growth_two_stage.json) and [examples/300347.sz_market_implied_growth_two_stage.output.json](./examples/300347.sz_market_implied_growth_two_stage.output.json) for a real 300347.SZ two-stage market-implied demo
+- [examples/300347.sz_market_implied_growth_three_stage.json](./examples/300347.sz_market_implied_growth_three_stage.json) and [examples/300347.sz_market_implied_growth_three_stage.output.json](./examples/300347.sz_market_implied_growth_three_stage.output.json) for a real 300347.SZ three-stage market-implied demo
 - [examples/cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json) for a CN provider-backed single-stage example
 
 ## Quality Bar

@@ -79,6 +79,96 @@ Unlike many open-source DCF scripts, FP-DCF:
 }
 ```
 
+## Data Dictionary
+
+The canonical JSON returned by `fp-dcf` is built from `ValuationOutput`. The main CLI may add `market_inputs`, `sensitivity`, and `artifacts` when those features are enabled.
+
+### Top-level output
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `ticker` | string | Ticker symbol used for the run. |
+| `market` | string | Market code such as `US` or `CN`. |
+| `valuation_model` | string | Effective model executed. |
+| `requested_valuation_model` | string \| null | Model requested before defaulting or validation. |
+| `effective_valuation_model` | string \| null | Model actually used after validation and default handling. |
+| `degraded` | bool | `true` when the run was structurally degraded. |
+| `degradation_reasons` | list[string] | Machine-readable degradation reason keys. |
+| `currency` | string \| null | Reporting currency if known. |
+| `as_of_date` | string \| null | Valuation date attached to the output. |
+| `tax` | object | Nested `TaxAssumptions` block. |
+| `wacc_inputs` | object | Nested `WACCInputs` block. |
+| `capital_structure` | object | Nested `CapitalStructure` block. |
+| `fcff` | object | Nested `FCFFSummary` block. |
+| `valuation` | object | Nested `ValuationSummary` block. |
+| `market_implied_growth` | object \| null | Nested `MarketImpliedGrowthOutput` block, omitted when disabled. |
+| `diagnostics` | list[string] | Machine-readable event codes. |
+| `warnings` | list[string] | Non-fatal quality, defaulting, or fallback warnings. |
+
+### Nested blocks
+
+* `tax` (`TaxAssumptions`): `effective_tax_rate`, `effective_tax_rate_source`, `marginal_tax_rate`, `marginal_tax_rate_source`
+* `wacc_inputs` (`WACCInputs`): `risk_free_rate`, `risk_free_rate_source`, `equity_risk_premium`, `equity_risk_premium_source`, `beta`, `beta_source`, `cost_of_equity`, `pre_tax_cost_of_debt`, `pre_tax_cost_of_debt_source`, `wacc`
+* `capital_structure` (`CapitalStructure`): `equity_weight`, `debt_weight`, `source`
+* `fcff` (`FCFFSummary`): `anchor`, `anchor_method`, `selected_path`, `anchor_ebiat_path`, `anchor_cfo_path`, `ebiat_path_available`, `cfo_path_available`, `after_tax_interest`, `after_tax_interest_source`, `reconciliation_gap`, `reconciliation_gap_pct`, `anchor_mode`, `anchor_observation_count`, `delta_nwc_source`, `last_report_period`
+* `valuation` (`ValuationSummary`): `enterprise_value`, `equity_value`, `per_share_value`, `terminal_growth_rate`, `terminal_growth_rate_effective`, `present_value_stage1`, `present_value_stage2`, `present_value_terminal`, `terminal_value`, `terminal_value_share`, `explicit_forecast_years`, `stage1_years`, `stage2_years`, `stage2_decay_mode`
+* `market_implied_growth` (`MarketImpliedGrowthOutput`): `enabled`, `success`, `valuation_model`, `solved_field`, `solved_value`, `solver_used`, `lower_bound`, `upper_bound`, `iterations`, `residual`, `market_price`, `market_enterprise_value`, `base_case_per_share_value`, `base_case_enterprise_value`, `message`
+* `market_inputs` (`MarketInputsSummary`, CLI-added when market-implied growth is present): `enterprise_value_market`, `enterprise_value_market_source`, `equity_value_market`, `market_price`, `market_price_source`, `shares_out`, `shares_out_source`, `net_debt`, `net_debt_source`
+* `sensitivity` summary (`SensitivityHeatmapOutput.to_summary_dict()`): `metric`, `metric_label`, `base_wacc`, `base_terminal_growth_rate`, `base_metric_value`, `market_price`, `wacc_axis`, `terminal_growth_axis`, `diagnostics`, `warnings`, and optional `grid` when `sensitivity.detail=true`
+* `artifacts` (CLI-added when chart rendering succeeds): `sensitivity_heatmap_path`, `sensitivity_heatmap_svg_path`
+
+### Standalone sensitivity CLI
+
+The separate `fp-dcf-sensitivity` command returns the full `SensitivityHeatmapOutput` object, which contains:
+
+* `ticker`
+* `market`
+* `valuation_model`
+* `metric`
+* `metric_label`
+* `currency`
+* `as_of_date`
+* `base_wacc`
+* `base_terminal_growth_rate`
+* `base_metric_value`
+* `market_price`
+* `wacc_values`
+* `terminal_growth_values`
+* `matrix`
+* `diagnostics`
+* `warnings`
+
+### Common codes
+
+`diagnostics` and `warnings` are append-only machine-readable string arrays. Common examples include:
+
+* `valuation_model_steady_state_single_stage`
+* `valuation_model_two_stage`
+* `valuation_model_three_stage`
+* `fcff_path_selected:cfo`
+* `fcff_path_selected:ebiat`
+* `provider_cache_hit:yahoo`
+* `provider_cache_miss:akshare_baostock`
+* `provider_fallback:yahoo->akshare_baostock`
+* `valuation_model_missing_defaulted_to_steady_state_single_stage`
+* `capital_structure_weights_defaulted_to_0.7_0.3`
+* `delta_nwc_missing_assumed_zero`
+* `shares_out_missing_per_share_value_unavailable`
+
+Current degradation reason keys are:
+
+* `degraded_due_to_default_capital_structure`
+* `degraded_due_to_assumed_zero_delta_nwc`
+* `degraded_due_to_ebiat_only_fcff_anchor`
+* `degraded_due_to_missing_shares_out`
+
+### Files written to disk
+
+* The main CLI writes the output JSON to `--output` or stdout.
+* The main CLI also writes `*.sensitivity.svg` and `*.sensitivity.png` when sensitivity is enabled.
+* Provider-backed normalization writes cache snapshots under `~/.cache/fp-dcf` by default, or under `XDG_CACHE_HOME/fp-dcf` when that environment variable is set.
+* The standalone sensitivity CLI writes a JSON summary to `--json-output` and, when `--output` is provided, a rendered chart artifact.
+
 See also:
 
 * [sample_input.json](./examples/sample_input.json)
@@ -91,6 +181,9 @@ See also:
 * [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
 * [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
 * [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
+* `300347.SZ` single-stage market-implied demo: [input](./examples/300347.sz_market_implied_growth_single_stage.json), [output](./examples/300347.sz_market_implied_growth_single_stage.output.json), [PNG](./examples/300347.sz_market_implied_growth_single_stage.output.sensitivity.png), [SVG](./examples/300347.sz_market_implied_growth_single_stage.output.sensitivity.svg)
+* `300347.SZ` two-stage market-implied demo: [input](./examples/300347.sz_market_implied_growth_two_stage.json), [output](./examples/300347.sz_market_implied_growth_two_stage.output.json), [PNG](./examples/300347.sz_market_implied_growth_two_stage.output.sensitivity.png), [SVG](./examples/300347.sz_market_implied_growth_two_stage.output.sensitivity.svg)
+* `300347.SZ` three-stage market-implied demo: [input](./examples/300347.sz_market_implied_growth_three_stage.json), [output](./examples/300347.sz_market_implied_growth_three_stage.output.json), [PNG](./examples/300347.sz_market_implied_growth_three_stage.output.sensitivity.png), [SVG](./examples/300347.sz_market_implied_growth_three_stage.output.sensitivity.svg)
 * [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
 * [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
 * [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
@@ -233,7 +326,7 @@ When `market="CN"` and Yahoo normalization fails, FP-DCF automatically falls bac
 
 ## Valuation models
 
-FP-DCF `v0.4.0` supports these valuation models in the main valuation path:
+FP-DCF `v0.5.1` supports these valuation models in the main valuation path:
 
 * `steady_state_single_stage`
 * `two_stage`
