@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .engine import run_valuation
-from .implied_growth import build_implied_growth_output
+from .market_implied_growth import reject_removed_market_implied_blocks, resolve_market_inputs
 from .normalize import normalize_payload
 from .plotting import render_wacc_terminal_growth_heatmap
 from .sensitivity import build_wacc_terminal_growth_sensitivity
@@ -221,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = _load_payload(args.input)
+        reject_removed_market_implied_blocks(payload)
         payload = normalize_payload(
             payload,
             provider_override=args.provider,
@@ -229,11 +230,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         valuation_output = run_valuation(payload)
         result = valuation_output.to_dict()
-        implied_growth_output = build_implied_growth_output(payload, result)
-        if implied_growth_output is not None:
-            market_inputs, implied_growth = implied_growth_output
+        market_inputs = None
+        if valuation_output.market_implied_growth is not None:
+            market_inputs = resolve_market_inputs(payload)
             result["market_inputs"] = market_inputs.to_dict()
-            result["implied_growth"] = implied_growth.to_dict()
 
         sensitivity_request = _resolve_sensitivity_request(payload, args)
         if sensitivity_request is not None:
@@ -244,8 +244,10 @@ def main(argv: list[str] | None = None) -> int:
                 else ["per_share_value", "equity_value", "enterprise_value"]
             )
             market_price = None
-            if implied_growth_output is not None:
-                market_price = implied_growth_output[0].market_price
+            if market_inputs is not None and market_inputs.market_price is not None:
+                market_price = market_inputs.market_price
+            elif valuation_output.market_implied_growth is not None:
+                market_price = valuation_output.market_implied_growth.market_price
             sensitivity = None
             last_exc: Exception | None = None
             for metric in metric_candidates:

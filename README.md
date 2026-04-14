@@ -53,8 +53,8 @@ Unlike many open-source DCF scripts, FP-DCF:
 ## What you get
 
 * structured valuation JSON for `steady_state_single_stage`, `two_stage`, and `three_stage`
-* implied growth (`one_stage` / `two_stage` only; the existing `implied_growth` block still does not support `three_stage`)
-* `market_implied_stage1_growth` backsolve for `two_stage` and `three_stage`
+* unified market-implied growth via `market_implied_growth`
+* `steady_state_single_stage` solves market-implied long-term growth; `two_stage` and `three_stage` solve market-implied stage-1 growth
 * `WACC x Terminal Growth` sensitivity heatmaps
 * provider-backed normalization with Yahoo plus CN fallback via AkShare + BaoStock
 * machine-readable diagnostics for downstream tools
@@ -85,10 +85,12 @@ See also:
 * [sample_output.json](./examples/sample_output.json)
 * [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
 * [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
-* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
-* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
-* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
-* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [sample_input_market_implied_growth_single_stage.json](./examples/sample_input_market_implied_growth_single_stage.json)
+* [sample_output_market_implied_growth_single_stage.json](./examples/sample_output_market_implied_growth_single_stage.json)
+* [sample_input_market_implied_growth_two_stage.json](./examples/sample_input_market_implied_growth_two_stage.json)
+* [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
+* [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
+* [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
 * [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
 * [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
 * [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
@@ -243,7 +245,7 @@ FP-DCF `v0.4.0` supports these valuation models in the main valuation path:
 
 When `valuation_model=three_stage`, missing required stage inputs also fail fast instead of degrading into another valuation model.
 
-`three_stage` in `v0.4.0` applies to the main valuation path and to the separate `market_implied_stage1_growth` backsolve. The existing `implied_growth` solver still supports only `one_stage` and `two_stage`.
+`market_implied_growth` is the only formal market-implied block. Its meaning depends on `valuation_model`: `steady_state_single_stage` solves market-implied long-term growth, while `two_stage` and `three_stage` solve market-implied stage-1 growth.
 
 Three-stage input example:
 
@@ -366,84 +368,60 @@ Default heatmap settings:
 
 Invalid cells where terminal growth is greater than or equal to WACC are left blank and reported in the diagnostics.
 
-## Implied growth
+## Market-implied growth
 
-The main CLI can also append a structured implied-growth block without changing the core `run_valuation()` behavior.
+The main CLI can append a structured `market_implied_growth` block without changing the core `run_valuation()` behavior.
 
 Input contract:
 
 * `payload.market_inputs.enterprise_value_market`, or
 * `payload.market_inputs.market_price` + `shares_out` + `net_debt`
-* `payload.implied_growth.model`: `one_stage` or `two_stage`
+* `payload.market_implied_growth.enabled = true`
+* optional `lower_bound`, `upper_bound`, `solver`, `tolerance`, and `max_iterations`
 
-`three_stage` is not supported in the existing implied-growth solver in `v0.4.0`.
+By valuation model:
 
-One-stage example:
+* `steady_state_single_stage` solves `growth_rate` as market-implied long-term growth
+* `two_stage` and `three_stage` solve `stage1_growth_rate` as market-implied stage-1 growth
+
+The output block is also `market_implied_growth` and always includes:
+
+* `enabled`
+* `success`
+* `valuation_model`
+* `solved_field`
+* `solved_value`
+* `solver_used`
+* `lower_bound`
+* `upper_bound`
+* `iterations`
+* `residual`
+
+It may also include:
+
+* `market_price`
+* `market_enterprise_value`
+* `base_case_per_share_value`
+* `base_case_enterprise_value`
+* `message`
+
+Legacy market-implied keys are rejected with explicit errors.
+
+Minimal single-stage example:
 
 ```json
 {
+  "valuation_model": "steady_state_single_stage",
   "market_inputs": {
     "market_price": 225.0
   },
-  "implied_growth": {
-    "model": "one_stage"
+  "market_implied_growth": {
+    "enabled": true
   }
 }
 ```
 
-Two-stage example:
-
-```json
-{
-  "market_inputs": {
-    "enterprise_value_market": 3500000000000.0
-  },
-  "implied_growth": {
-    "model": "two_stage",
-    "high_growth_years": 5,
-    "stable_growth_rate": 0.03,
-    "lower_bound": 0.0,
-    "upper_bound": 0.25
-  }
-}
-```
-
-The output appends:
-
-* `market_inputs`: resolved market EV / equity value / price / shares / net debt with sources
-* `implied_growth`: structured solver output
-
-For `one_stage`, FP-DCF uses a closed-form implied growth solution. For `two_stage`, it solves the implied high-growth rate via bisection while keeping the stable growth rate fixed.
-
-If implied growth is enabled but the required market inputs are incomplete, the CLI skips the implied-growth block instead of failing the main valuation run.
-
-Single-stage market-implied growth should continue to use `payload.implied_growth.model=one_stage`. Do not try to force `steady_state_single_stage` through `market_implied_stage1_growth`; that block is reserved for explicit stage-1 backsolves.
-
-## Market-implied stage1 growth
-
-`market_implied_stage1_growth` is a separate output block from `implied_growth`.
-
-It answers one specific question:
-
-* holding the base-case `FCFF` anchor, `WACC`, terminal growth, stage lengths, capital structure, `shares_out`, and `net_debt` fixed
-* what `stage1_growth_rate` would make the DCF match the market price or market EV?
-
-This is a single-variable interpretation layer. It does not auto-rewrite the payload assumptions and it is not a multi-parameter calibration step.
-
-Supported scope:
-
-* `valuation_model=two_stage`
-* `valuation_model=three_stage`
-
-Not supported:
-
-* `valuation_model=steady_state_single_stage`
-
-If you enable it on `steady_state_single_stage`, FP-DCF fails fast with:
-
-* `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`
-
-Minimal two-stage input:
+Minimal two-stage example:
 
 ```json
 {
@@ -451,7 +429,7 @@ Minimal two-stage input:
   "market_inputs": {
     "market_price": 582.5849079694428
   },
-  "market_implied_stage1_growth": {
+  "market_implied_growth": {
     "enabled": true,
     "lower_bound": 0.0,
     "upper_bound": 0.4
@@ -469,65 +447,38 @@ Minimal two-stage input:
 }
 ```
 
-Minimal three-stage input:
-
-```json
-{
-  "valuation_model": "three_stage",
-  "market_inputs": {
-    "market_price": 491.243930259804
-  },
-  "market_implied_stage1_growth": {
-    "enabled": true
-  },
-  "assumptions": {
-    "terminal_growth_rate": 0.03,
-    "stage1_growth_rate": 0.12,
-    "stage1_years": 3,
-    "stage2_end_growth_rate": 0.06,
-    "stage2_years": 2,
-    "stage2_decay_mode": "linear"
-  },
-  "fundamentals": {
-    "fcff_anchor": 100.0,
-    "shares_out": 10.0,
-    "net_debt": 0.0
-  }
-}
-```
-
 Output excerpt:
 
 ```json
 {
-  "market_implied_stage1_growth": {
+  "market_implied_growth": {
     "enabled": true,
     "success": true,
     "valuation_model": "two_stage",
-    "solver": "bisection",
-    "target_metric": "per_share_value",
-    "market_price": 582.5849079694428,
-    "enterprise_value_market": 5845.849079694428,
-    "base_case_value": 506.5955721473416,
-    "base_input_value": 0.1,
+    "solved_field": "stage1_growth_rate",
     "solved_value": 0.14021034240722655,
-    "absolute_offset": 0.04021034240722654,
-    "relative_offset_pct": 40.21034240722654,
+    "solver_used": "bisection",
     "lower_bound": 0.0,
     "upper_bound": 0.4,
     "iterations": 20,
     "residual": 0.00035705652669548726,
-    "interpretation": "The market is pricing a stronger explicit-growth phase than the base case."
+    "market_price": 582.5849079694428,
+    "market_enterprise_value": 5845.849079694428,
+    "base_case_per_share_value": 506.5955721473416,
+    "base_case_enterprise_value": 5085.955721473416,
+    "message": "Market-implied growth solved successfully."
   }
 }
 ```
 
 Examples:
 
-* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
-* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
-* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
-* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [sample_input_market_implied_growth_single_stage.json](./examples/sample_input_market_implied_growth_single_stage.json)
+* [sample_output_market_implied_growth_single_stage.json](./examples/sample_output_market_implied_growth_single_stage.json)
+* [sample_input_market_implied_growth_two_stage.json](./examples/sample_input_market_implied_growth_two_stage.json)
+* [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
+* [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
+* [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
 
 ## Provider cache
 
@@ -628,18 +579,22 @@ The public contract is meant to be machine-readable first. A typical response sh
     "shares_out": 15500000000.0,
     "net_debt": 46000000000.0
   },
-  "implied_growth": {
+  "market_implied_growth": {
     "enabled": true,
-    "model": "one_stage",
-    "solver": "closed_form",
     "success": true,
-    "enterprise_value_market": 3533500000000.0,
-    "fcff_anchor": 106216000000.0,
-    "wacc": 0.0912624,
-    "one_stage": {
-      "growth_rate": 0.05941663866081859
-    },
-    "two_stage": null
+    "valuation_model": "steady_state_single_stage",
+    "solved_field": "growth_rate",
+    "solved_value": 0.05941663866081859,
+    "solver_used": "closed_form",
+    "lower_bound": -0.5,
+    "upper_bound": 0.5,
+    "iterations": 0,
+    "residual": 0.0,
+    "market_price": 225.0,
+    "market_enterprise_value": 3533500000000.0,
+    "base_case_per_share_value": 112.24525194214796,
+    "base_case_enterprise_value": 1785801405103.2935,
+    "message": "Market-implied growth solved successfully."
   },
   "diagnostics": [
     "tax_rate_paths_are_separated",

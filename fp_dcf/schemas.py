@@ -100,46 +100,35 @@ class MarketInputsSummary:
 
 
 @dataclass(slots=True)
-class ImpliedGrowthSummary:
+class MarketImpliedGrowthInput:
     enabled: bool = False
-    model: str | None = None
-    solver: str | None = None
-    success: bool = False
-    enterprise_value_market: float | None = None
-    fcff_anchor: float | None = None
-    wacc: float | None = None
-    one_stage: dict[str, float | None] | None = None
-    two_stage: dict[str, float | int | None] | None = None
-    lower_bound: float | None = None
-    upper_bound: float | None = None
-    tolerance: float | None = None
-    iterations: int | None = None
-    diagnostics: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    lower_bound: float = -0.5
+    upper_bound: float = 0.5
+    solver: str = "auto"
+    tolerance: float = 1e-6
+    max_iterations: int = 100
 
     def to_dict(self) -> dict:
         return asdict(self)
 
 
 @dataclass(slots=True)
-class MarketImpliedStage1GrowthSummary:
+class MarketImpliedGrowthOutput:
     enabled: bool = False
     success: bool = False
     valuation_model: str | None = None
-    solver: str | None = None
-    target_metric: str | None = None
-    market_price: float | None = None
-    enterprise_value_market: float | None = None
-    base_case_value: float | None = None
-    base_input_value: float | None = None
+    solved_field: str | None = None
     solved_value: float | None = None
-    absolute_offset: float | None = None
-    relative_offset_pct: float | None = None
+    solver_used: str | None = None
     lower_bound: float | None = None
     upper_bound: float | None = None
     iterations: int | None = None
     residual: float | None = None
-    interpretation: str | None = None
+    market_price: float | None = None
+    market_enterprise_value: float | None = None
+    base_case_per_share_value: float | None = None
+    base_case_enterprise_value: float | None = None
+    message: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -174,6 +163,7 @@ class ValuationOutput:
     requested_valuation_model: str | None = None
     effective_valuation_model: str | None = None
     degraded: bool = False
+    degradation_reasons: list[str] = field(default_factory=list)
     currency: str | None = None
     as_of_date: str | None = None
     tax: TaxAssumptions = field(default_factory=TaxAssumptions)
@@ -181,14 +171,14 @@ class ValuationOutput:
     capital_structure: CapitalStructure = field(default_factory=CapitalStructure)
     fcff: FCFFSummary = field(default_factory=FCFFSummary)
     valuation: ValuationSummary = field(default_factory=ValuationSummary)
-    market_implied_stage1_growth: MarketImpliedStage1GrowthSummary | None = None
+    market_implied_growth: MarketImpliedGrowthOutput | None = None
     diagnostics: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         payload = asdict(self)
-        if payload.get("market_implied_stage1_growth") is None:
-            payload.pop("market_implied_stage1_growth", None)
+        if payload.get("market_implied_growth") is None:
+            payload.pop("market_implied_growth", None)
         return payload
 
 

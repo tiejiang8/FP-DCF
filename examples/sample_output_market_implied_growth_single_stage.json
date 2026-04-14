@@ -125,7 +125,7 @@
     "warnings": []
   },
   "artifacts": {
-    "sensitivity_heatmap_path": "examples/sample_output.sensitivity.png",
-    "sensitivity_heatmap_svg_path": "examples/sample_output.sensitivity.svg"
+    "sensitivity_heatmap_path": "examples/sample_output_market_implied_growth_single_stage.sensitivity.png",
+    "sensitivity_heatmap_svg_path": "examples/sample_output_market_implied_growth_single_stage.sensitivity.svg"
   }
 }

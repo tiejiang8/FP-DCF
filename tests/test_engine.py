@@ -63,6 +63,35 @@ def _two_stage_payload(**assumption_overrides):
     }
 
 
+def _single_stage_payload(**fundamental_overrides):
+    fundamentals = {
+        "ebit": 100.0,
+        "da": 10.0,
+        "capex": 8.0,
+        "delta_nwc": 5.0,
+        "shares_out": 10.0,
+        "net_debt": 50.0,
+    }
+    fundamentals.update(fundamental_overrides)
+    return {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.20,
+            "marginal_tax_rate": 0.25,
+            "risk_free_rate": 0.04,
+            "equity_risk_premium": 0.05,
+            "beta": 1.1,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.8,
+            "debt_weight": 0.2,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": fundamentals,
+    }
+
+
 def test_run_valuation_single_stage_from_fundamentals():
     payload = {
         "ticker": "TEST",
@@ -618,6 +647,198 @@ def test_run_valuation_preserves_capital_structure_fallback_warning():
     assert "yahoo_total_debt_unavailable_used_net_debt_for_capital_structure" in out.warnings
 
 
+def test_run_valuation_missing_model_defaults_and_is_explicit():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.7,
+            "debt_weight": 0.3,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 0.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert out.requested_valuation_model is None
+    assert out.effective_valuation_model == "steady_state_single_stage"
+    assert out.valuation_model == "steady_state_single_stage"
+    assert "valuation_model_missing_defaulted_to_steady_state_single_stage" in out.warnings
+    assert out.degraded is False
+
+
+def test_run_valuation_default_capital_weights_marks_degraded():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "shares_out": 10.0,
+            "net_debt": 0.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert out.capital_structure.source == "default"
+    assert "capital_structure_weights_defaulted_to_0.7_0.3" in out.warnings
+    assert out.degraded is True
+    assert "degraded_due_to_default_capital_structure" in out.degradation_reasons
+
+
+def test_run_valuation_assumed_zero_delta_nwc_marks_degraded():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.20,
+            "marginal_tax_rate": 0.25,
+            "risk_free_rate": 0.04,
+            "equity_risk_premium": 0.05,
+            "beta": 1.1,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.8,
+            "debt_weight": 0.2,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "ebit": 100.0,
+            "ocf": 70.0,
+            "interest_paid": 20.0,
+            "da": 10.0,
+            "capex": 8.0,
+            "shares_out": 10.0,
+            "net_debt": 50.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert "delta_nwc_missing_assumed_zero" in out.warnings
+    assert out.fcff.delta_nwc_source == "assumed_zero"
+    assert out.degraded is True
+    assert "degraded_due_to_assumed_zero_delta_nwc" in out.degradation_reasons
+
+
+def test_run_valuation_only_ebiat_available_marks_degraded():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.20,
+            "marginal_tax_rate": 0.25,
+            "risk_free_rate": 0.04,
+            "equity_risk_premium": 0.05,
+            "beta": 1.1,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.8,
+            "debt_weight": 0.2,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "ebit": 100.0,
+            "da": 10.0,
+            "capex": 8.0,
+            "delta_nwc": 5.0,
+            "shares_out": 10.0,
+            "net_debt": 50.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert "fcff_path_selector_only_ebiat_available" in out.diagnostics
+    assert out.fcff.selected_path == "ebiat"
+    assert out.degraded is True
+    assert "degraded_due_to_ebiat_only_fcff_anchor" in out.degradation_reasons
+
+
+def test_run_valuation_warns_when_ebiat_only_uses_assumed_zero_delta_nwc():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.20,
+            "marginal_tax_rate": 0.25,
+            "risk_free_rate": 0.04,
+            "equity_risk_premium": 0.05,
+            "beta": 1.1,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.8,
+            "debt_weight": 0.2,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "ebit": 100.0,
+            "da": 10.0,
+            "capex": 8.0,
+            "shares_out": 10.0,
+            "net_debt": 50.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert "delta_nwc_missing_assumed_zero" in out.warnings
+    assert "fcff_anchor_quality_is_low_ebiat_only_with_assumed_zero_delta_nwc" in out.warnings
+    assert "degraded_due_to_assumed_zero_delta_nwc" in out.degradation_reasons
+    assert "degraded_due_to_ebiat_only_fcff_anchor" in out.degradation_reasons
+
+
+def test_run_valuation_missing_shares_out_marks_degraded_and_per_share_none():
+    payload = {
+        "ticker": "TEST",
+        "market": "US",
+        "valuation_model": "steady_state_single_stage",
+        "assumptions": {
+            "effective_tax_rate": 0.21,
+            "marginal_tax_rate": 0.21,
+            "risk_free_rate": 0.03,
+            "equity_risk_premium": 0.04,
+            "beta": 1.0,
+            "pre_tax_cost_of_debt": 0.03,
+            "equity_weight": 0.7,
+            "debt_weight": 0.3,
+            "terminal_growth_rate": 0.03,
+        },
+        "fundamentals": {
+            "fcff_anchor": 100.0,
+            "net_debt": 0.0,
+        },
+    }
+
+    out = run_valuation(payload)
+
+    assert "shares_out_missing_per_share_value_unavailable" in out.warnings
+    assert out.valuation.per_share_value is None
+    assert out.degraded is True
+    assert "degraded_due_to_missing_shares_out" in out.degradation_reasons
+
+
 def test_run_valuation_three_stage_basic():
     out = run_valuation(_three_stage_payload())
 
@@ -702,7 +923,27 @@ def test_run_valuation_unknown_model_errors():
         run_valuation(payload)
 
 
-def test_market_implied_stage1_growth_two_stage_success():
+def test_market_implied_growth_single_stage_success():
+    payload = _single_stage_payload()
+    payload["market_inputs"] = {
+        "market_price": 180.0,
+    }
+    payload["market_implied_growth"] = {"enabled": True}
+
+    out = run_valuation(payload)
+
+    assert out.market_implied_growth is not None
+    assert out.market_implied_growth.success is True
+    assert out.market_implied_growth.valuation_model == "steady_state_single_stage"
+    assert out.market_implied_growth.solved_field == "growth_rate"
+    assert out.market_implied_growth.solver_used == "closed_form"
+    assert out.market_implied_growth.solved_value is not None
+    assert out.market_implied_growth.market_price == pytest.approx(180.0)
+    assert out.market_implied_growth.market_enterprise_value == pytest.approx(1850.0)
+    assert out.market_implied_growth.message == "Market-implied growth solved successfully."
+
+
+def test_market_implied_growth_two_stage_success():
     payload = _two_stage_payload()
     base_case = run_valuation(payload)
     assert base_case.valuation.per_share_value is not None
@@ -710,23 +951,27 @@ def test_market_implied_stage1_growth_two_stage_success():
     payload["market_inputs"] = {
         "market_price": float(base_case.valuation.per_share_value) * 1.20,
     }
-    payload["market_implied_stage1_growth"] = {"enabled": True}
+    payload["market_implied_growth"] = {"enabled": True}
 
     out = run_valuation(payload)
 
-    assert out.market_implied_stage1_growth is not None
-    assert out.market_implied_stage1_growth.success is True
-    assert out.market_implied_stage1_growth.valuation_model == "two_stage"
-    assert out.market_implied_stage1_growth.target_metric == "per_share_value"
-    assert out.market_implied_stage1_growth.solved_value is not None
-    assert out.market_implied_stage1_growth.base_input_value == pytest.approx(0.10)
-    assert out.market_implied_stage1_growth.solved_value != pytest.approx(
-        out.market_implied_stage1_growth.base_input_value
+    assert out.market_implied_growth is not None
+    assert out.market_implied_growth.enabled is True
+    assert out.market_implied_growth.success is True
+    assert out.market_implied_growth.valuation_model == "two_stage"
+    assert out.market_implied_growth.solved_field == "stage1_growth_rate"
+    assert out.market_implied_growth.solver_used == "bisection"
+    assert out.market_implied_growth.solved_value is not None
+    assert out.market_implied_growth.market_price == pytest.approx(
+        float(base_case.valuation.per_share_value) * 1.20
     )
-    assert out.market_implied_stage1_growth.solved_value > out.market_implied_stage1_growth.base_input_value
+    assert out.market_implied_growth.base_case_per_share_value == pytest.approx(
+        float(base_case.valuation.per_share_value)
+    )
+    assert out.market_implied_growth.message == "Market-implied growth solved successfully."
 
 
-def test_market_implied_stage1_growth_three_stage_success():
+def test_market_implied_growth_three_stage_success():
     payload = _three_stage_payload()
     base_case = run_valuation(payload)
     assert base_case.valuation.per_share_value is not None
@@ -734,18 +979,21 @@ def test_market_implied_stage1_growth_three_stage_success():
     payload["market_inputs"] = {
         "market_price": float(base_case.valuation.per_share_value) * 0.90,
     }
-    payload["market_implied_stage1_growth"] = {"enabled": True}
+    payload["market_implied_growth"] = {"enabled": True}
 
     out = run_valuation(payload)
 
-    assert out.market_implied_stage1_growth is not None
-    assert out.market_implied_stage1_growth.success is True
-    assert out.market_implied_stage1_growth.valuation_model == "three_stage"
-    assert out.market_implied_stage1_growth.target_metric == "per_share_value"
-    assert out.market_implied_stage1_growth.solved_value is not None
+    assert out.market_implied_growth is not None
+    assert out.market_implied_growth.enabled is True
+    assert out.market_implied_growth.success is True
+    assert out.market_implied_growth.valuation_model == "three_stage"
+    assert out.market_implied_growth.solved_field == "stage1_growth_rate"
+    assert out.market_implied_growth.solved_value is not None
+    assert out.market_implied_growth.solver_used == "bisection"
+    assert out.market_implied_growth.message == "Market-implied growth solved successfully."
 
 
-def test_market_implied_stage1_growth_rejects_single_stage():
+def test_removed_implied_growth_raises():
     payload = {
         "ticker": "TEST",
         "market": "US",
@@ -769,19 +1017,32 @@ def test_market_implied_stage1_growth_rejects_single_stage():
         "market_inputs": {
             "market_price": 100.0,
         },
-        "market_implied_stage1_growth": {
+        "implied_growth": {
             "enabled": True,
         },
     }
 
     with pytest.raises(
         ValueError,
-        match="market_implied_stage1_growth requires valuation_model in \\{two_stage, three_stage\\}",
+        match="`implied_growth` has been removed\\. Use `market_implied_growth` instead\\.",
     ):
         run_valuation(payload)
 
 
-def test_market_implied_stage1_growth_unbracketed_bounds_returns_failure():
+def test_removed_market_implied_stage1_growth_raises():
+    payload = _two_stage_payload()
+    payload["market_implied_stage1_growth"] = {
+        "enabled": True,
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="`market_implied_stage1_growth` has been removed\\. Use `market_implied_growth` instead\\.",
+    ):
+        run_valuation(payload)
+
+
+def test_market_implied_growth_solver_failure_returns_success_false():
     payload = _two_stage_payload()
     base_case = run_valuation(payload)
     assert base_case.valuation.per_share_value is not None
@@ -789,73 +1050,18 @@ def test_market_implied_stage1_growth_unbracketed_bounds_returns_failure():
     payload["market_inputs"] = {
         "market_price": float(base_case.valuation.per_share_value) * 2.0,
     }
-    payload["market_implied_stage1_growth"] = {
+    payload["market_implied_growth"] = {
         "enabled": True,
-        "lower_bound": 0.00,
+        "lower_bound": 0.0,
         "upper_bound": 0.05,
     }
 
     out = run_valuation(payload)
 
-    assert out.market_implied_stage1_growth is not None
-    assert out.market_implied_stage1_growth.success is False
-    assert out.market_implied_stage1_growth.solved_value is None
-    assert (
-        out.market_implied_stage1_growth.interpretation
-        == "The market price cannot be matched within the configured stage1_growth_rate search bounds."
-    )
-    assert "market_implied_stage1_growth_bounds_do_not_bracket_root" in out.warnings
-
-
-def test_market_implied_stage1_growth_uses_fixed_other_parameters():
-    payload = _three_stage_payload()
-    base_case = run_valuation(payload)
-    assert base_case.valuation.per_share_value is not None
-
-    original_stage2_end_growth_rate = payload["assumptions"]["stage2_end_growth_rate"]
-    original_stage2_years = payload["assumptions"]["stage2_years"]
-    original_terminal_growth_rate = payload["assumptions"]["terminal_growth_rate"]
-
-    payload["market_inputs"] = {
-        "market_price": float(base_case.valuation.per_share_value) * 1.10,
-    }
-    payload["market_implied_stage1_growth"] = {"enabled": True}
-
-    out = run_valuation(payload)
-
-    assert out.market_implied_stage1_growth is not None
-    assert out.market_implied_stage1_growth.success is True
-    assert payload["assumptions"]["stage2_end_growth_rate"] == pytest.approx(original_stage2_end_growth_rate)
-    assert payload["assumptions"]["stage2_years"] == original_stage2_years
-    assert payload["assumptions"]["terminal_growth_rate"] == pytest.approx(original_terminal_growth_rate)
-    assert out.valuation.stage2_years == original_stage2_years
-    assert out.valuation.terminal_growth_rate == pytest.approx(original_terminal_growth_rate)
-
-
-def test_market_implied_stage1_growth_relative_offset_sign():
-    payload_high = _two_stage_payload()
-    base_case_high = run_valuation(payload_high)
-    assert base_case_high.valuation.per_share_value is not None
-    payload_high["market_inputs"] = {
-        "market_price": float(base_case_high.valuation.per_share_value) * 1.10,
-    }
-    payload_high["market_implied_stage1_growth"] = {"enabled": True}
-
-    out_high = run_valuation(payload_high)
-
-    payload_low = _two_stage_payload()
-    base_case_low = run_valuation(payload_low)
-    assert base_case_low.valuation.per_share_value is not None
-    payload_low["market_inputs"] = {
-        "market_price": float(base_case_low.valuation.per_share_value) * 0.90,
-    }
-    payload_low["market_implied_stage1_growth"] = {"enabled": True}
-
-    out_low = run_valuation(payload_low)
-
-    assert out_high.market_implied_stage1_growth is not None
-    assert out_low.market_implied_stage1_growth is not None
-    assert out_high.market_implied_stage1_growth.relative_offset_pct is not None
-    assert out_low.market_implied_stage1_growth.relative_offset_pct is not None
-    assert out_high.market_implied_stage1_growth.relative_offset_pct > 0
-    assert out_low.market_implied_stage1_growth.relative_offset_pct < 0
+    assert out.market_implied_growth is not None
+    assert out.market_implied_growth.enabled is True
+    assert out.market_implied_growth.success is False
+    assert out.market_implied_growth.solved_value is None
+    assert out.market_implied_growth.solver_used == "bisection"
+    assert out.market_implied_growth.solved_field == "stage1_growth_rate"
+    assert out.market_implied_growth.message == "No sign change in bounds for market-implied growth solver."

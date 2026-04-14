@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import sys
 import types
 from pathlib import Path
@@ -7,6 +8,11 @@ from pathlib import Path
 import pytest
 
 from fp_dcf import normalize_payload
+
+
+@contextmanager
+def _noop_session():
+    yield
 
 
 def _install_fake_yahoo_provider(fetch_values: list[dict] | None = None):
@@ -85,6 +91,82 @@ def _install_fake_akshare_baostock_provider(fetch_values: list[dict] | None = No
     fake_provider.enrich_payload_from_akshare_baostock = fake_enrich
     sys.modules["fp_dcf.providers.akshare_baostock"] = fake_provider
     return state
+
+
+def _patch_real_akshare_baostock_provider(
+    monkeypatch,
+    *,
+    stock_info_rows: list[dict] | None = None,
+    balance_sheet_fields: dict | None = None,
+):
+    pd = pytest.importorskip("pandas")
+
+    from fp_dcf.providers import akshare_baostock as provider
+
+    report_date = pd.Timestamp("2025-12-31")
+    income_statement = pd.DataFrame(
+        [
+            {
+                "报告日": report_date,
+                "类型": "合并期末",
+                "营业利润": 100.0,
+                "利息费用": 10.0,
+                "利润总额": 100.0,
+                "所得税费用": 20.0,
+            }
+        ]
+    )
+    balance_row = {
+        "报告日": report_date,
+        "类型": "合并期末",
+        "货币资金": 80.0,
+        "短期借款": 20.0,
+        "长期借款": 80.0,
+        "流动资产合计": 200.0,
+        "流动负债合计": 120.0,
+        "交易性金融资产": 10.0,
+    }
+    if balance_sheet_fields:
+        balance_row.update(balance_sheet_fields)
+    balance_sheet = pd.DataFrame([balance_row])
+    cash_flow_statement = pd.DataFrame(
+        [
+            {
+                "报告日": report_date,
+                "类型": "合并期末",
+                "经营活动产生的现金流量净额": 120.0,
+                "购建固定资产、无形资产和其他长期资产所支付的现金": 18.0,
+                "支付利息、手续费及佣金的现金": 9.0,
+            }
+        ]
+    )
+    stock_info = pd.DataFrame(stock_info_rows or [])
+
+    monkeypatch.setattr(provider, "pd", pd)
+    monkeypatch.setattr(provider, "bs", object())
+    monkeypatch.setattr(provider, "np", object())
+    monkeypatch.setattr(provider, "_baostock_session", _noop_session)
+    monkeypatch.setattr(provider, "_latest_close", lambda symbol: 100.0)
+    monkeypatch.setattr(provider, "_compute_beta", lambda symbol, benchmark: 1.1)
+
+    class FakeAk:
+        @staticmethod
+        def stock_financial_report_sina(*, stock: str, symbol: str):
+            if symbol == "利润表":
+                return income_statement
+            if symbol == "资产负债表":
+                return balance_sheet
+            if symbol == "现金流量表":
+                return cash_flow_statement
+            raise AssertionError(symbol)
+
+        @staticmethod
+        def stock_individual_info_em(*, symbol: str):
+            assert symbol == "600519"
+            return stock_info
+
+    monkeypatch.setattr(provider, "ak", FakeAk)
+    return provider
 
 
 def test_normalize_payload_uses_yahoo_provider_when_core_inputs_missing(tmp_path: Path):
@@ -233,6 +315,72 @@ def test_normalize_payload_does_not_fall_back_from_yahoo_for_us(tmp_path: Path):
             normalize_payload({"ticker": "AAPL", "market": "US"}, cache_dir=tmp_path)
     finally:
         sys.modules.pop("fp_dcf.providers.yahoo", None)
+
+
+@pytest.mark.parametrize(
+    ("item_name", "raw_value", "expected_shares_out", "expected_unit"),
+    [
+        ("总股本", 10.0, 10.0, "股"),
+        ("总股本(万股)", 10.0, 100000.0, "万股"),
+        ("总股本（亿股）", 10.0, 1000000000.0, "亿股"),
+    ],
+)
+def test_akshare_baostock_resolves_shares_out_from_stock_info_aliases(
+    monkeypatch,
+    item_name,
+    raw_value,
+    expected_shares_out,
+    expected_unit,
+):
+    provider = _patch_real_akshare_baostock_provider(
+        monkeypatch,
+        stock_info_rows=[{"item": item_name, "value": raw_value}],
+    )
+
+    snapshot = provider.fetch_akshare_baostock_snapshot("600519.SH", market="CN", statement_frequency="A")
+
+    assert snapshot["fundamentals"]["shares_out"] == pytest.approx(expected_shares_out)
+    assert snapshot["fundamentals"]["shares_out_source"] == "akshare:stock_individual_info_em"
+    assert snapshot["fundamentals"]["shares_out_raw_field"] == item_name
+    assert snapshot["fundamentals"]["shares_out_raw_unit"] == expected_unit
+
+
+@pytest.mark.parametrize("field_name", ["股本", "实收资本(或股本)"])
+def test_akshare_baostock_falls_back_to_balance_sheet_share_capital(monkeypatch, field_name):
+    provider = _patch_real_akshare_baostock_provider(
+        monkeypatch,
+        stock_info_rows=[],
+        balance_sheet_fields={field_name: 10.0},
+    )
+
+    snapshot = provider.fetch_akshare_baostock_snapshot("600519.SH", market="CN", statement_frequency="A")
+
+    assert snapshot["fundamentals"]["shares_out"] == 10.0
+    assert snapshot["fundamentals"]["shares_out_source"] == "akshare:balance_sheet_share_capital"
+    assert snapshot["fundamentals"]["shares_out_raw_field"] == field_name
+    assert snapshot["fundamentals"]["shares_out_raw_unit"] == "股"
+
+
+def test_akshare_baostock_marks_shares_out_unresolved_when_all_paths_fail(monkeypatch):
+    provider = _patch_real_akshare_baostock_provider(
+        monkeypatch,
+        stock_info_rows=[],
+        balance_sheet_fields={},
+    )
+
+    snapshot = provider.fetch_akshare_baostock_snapshot("600519.SH", market="CN", statement_frequency="A")
+    out = provider.enrich_payload_from_akshare_baostock(
+        {"ticker": "600519.SH", "market": "CN"},
+        snapshot=snapshot,
+    )
+
+    assert snapshot["fundamentals"]["shares_out"] is None
+    assert "shares_out_unresolved_akshare_baostock" in snapshot["diagnostics"]
+    assert "shares_out_unresolved_akshare_baostock" in out["_prefill_diagnostics"]
+    assert (
+        "capital_structure_source_unavailable_due_to_missing_shares_out"
+        in out["_prefill_diagnostics"]
+    )
 
 
 def test_yahoo_snapshot_uses_total_debt_for_capital_structure_weights(monkeypatch):

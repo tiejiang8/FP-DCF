@@ -1,5 +1,6 @@
 from fp_dcf import (
-    MarketImpliedStage1GrowthSummary,
+    MarketImpliedGrowthInput,
+    MarketImpliedGrowthOutput,
     SensitivityHeatmapOutput,
     ValuationOutput,
     ValuationSummary,
@@ -19,13 +20,57 @@ def test_valuation_output_defaults_are_stable():
     assert result.requested_valuation_model is None
     assert result.effective_valuation_model is None
     assert result.degraded is False
+    assert result.degradation_reasons == []
     assert result.tax.effective_tax_rate is None
     assert result.wacc_inputs.wacc is None
     assert result.capital_structure.equity_weight is None
     assert result.fcff.anchor is None
     assert result.valuation.enterprise_value is None
+    assert result.market_implied_growth is None
     assert result.diagnostics == []
     assert result.warnings == []
+
+
+def test_market_implied_growth_input_defaults_are_stable():
+    result = MarketImpliedGrowthInput()
+
+    assert result.enabled is False
+    assert result.lower_bound == -0.5
+    assert result.upper_bound == 0.5
+    assert result.solver == "auto"
+    assert result.tolerance == 1e-6
+    assert result.max_iterations == 100
+
+
+def test_market_implied_growth_output_serializes_fields():
+    summary = MarketImpliedGrowthOutput(
+        enabled=True,
+        success=True,
+        valuation_model="two_stage",
+        solved_field="stage1_growth_rate",
+        solved_value=0.1362,
+        solver_used="bisection",
+        lower_bound=0.0,
+        upper_bound=0.4,
+        iterations=37,
+        residual=0.000001,
+        market_price=258.86,
+        market_enterprise_value=3867000000000.0,
+        base_case_per_share_value=150.85,
+        base_case_enterprise_value=3867000000000.0,
+        message="Market-implied growth solved successfully.",
+    )
+
+    payload = summary.to_dict()
+
+    assert payload["enabled"] is True
+    assert payload["success"] is True
+    assert payload["valuation_model"] == "two_stage"
+    assert payload["solved_field"] == "stage1_growth_rate"
+    assert payload["solver_used"] == "bisection"
+    assert payload["solved_value"] == 0.1362
+    assert payload["market_price"] == 258.86
+    assert payload["base_case_per_share_value"] == 150.85
 
 
 def test_sensitivity_heatmap_output_defaults_are_stable():
@@ -114,7 +159,25 @@ def test_valuation_output_serializes_requested_and_effective_models():
         valuation_model="three_stage",
         requested_valuation_model="three_stage",
         effective_valuation_model="three_stage",
-        degraded=False,
+        degraded=True,
+        degradation_reasons=["degraded_due_to_default_capital_structure"],
+        market_implied_growth=MarketImpliedGrowthOutput(
+            enabled=True,
+            success=True,
+            valuation_model="three_stage",
+            solved_field="stage1_growth_rate",
+            solved_value=0.12,
+            solver_used="bisection",
+            lower_bound=-0.5,
+            upper_bound=0.5,
+            iterations=12,
+            residual=0.0,
+            market_price=123.0,
+            market_enterprise_value=1000.0,
+            base_case_per_share_value=10.0,
+            base_case_enterprise_value=1000.0,
+            message="Market-implied growth solved successfully.",
+        ),
         valuation=ValuationSummary(
             present_value_stage2=12.0,
             terminal_value=34.0,
@@ -130,72 +193,22 @@ def test_valuation_output_serializes_requested_and_effective_models():
     assert payload["valuation_model"] == "three_stage"
     assert payload["requested_valuation_model"] == "three_stage"
     assert payload["effective_valuation_model"] == "three_stage"
-    assert payload["degraded"] is False
+    assert payload["degraded"] is True
+    assert payload["degradation_reasons"] == ["degraded_due_to_default_capital_structure"]
+    assert payload["market_implied_growth"]["enabled"] is True
+    assert payload["market_implied_growth"]["solved_field"] == "stage1_growth_rate"
     assert payload["valuation"]["present_value_stage2"] == 12.0
     assert payload["valuation"]["terminal_value"] == 34.0
     assert payload["valuation"]["explicit_forecast_years"] == 5
 
 
-def test_market_implied_stage1_growth_summary_serializes_fields():
-    summary = MarketImpliedStage1GrowthSummary(
-        enabled=True,
-        success=True,
-        valuation_model="two_stage",
-        solver="bisection",
-        target_metric="per_share_value",
-        market_price=258.86,
-        enterprise_value_market=3867000000000.0,
-        base_case_value=150.85,
-        base_input_value=0.09,
-        solved_value=0.1362,
-        absolute_offset=0.0462,
-        relative_offset_pct=51.33,
-        lower_bound=0.0,
-        upper_bound=0.4,
-        iterations=37,
-        residual=0.000001,
-        interpretation="The market is pricing a stronger explicit-growth phase than the base case.",
-    )
-
-    payload = summary.to_dict()
-
-    assert payload["enabled"] is True
-    assert payload["success"] is True
-    assert payload["valuation_model"] == "two_stage"
-    assert payload["solver"] == "bisection"
-    assert payload["target_metric"] == "per_share_value"
-    assert payload["solved_value"] == 0.1362
-    assert payload["relative_offset_pct"] == 51.33
-
-
-def test_valuation_output_serializes_market_implied_stage1_growth_block():
+def test_valuation_output_omits_market_implied_growth_when_absent():
     result = ValuationOutput(
         ticker="AAPL",
         market="US",
         valuation_model="two_stage",
-        market_implied_stage1_growth=MarketImpliedStage1GrowthSummary(
-            enabled=True,
-            success=True,
-            valuation_model="two_stage",
-            solver="bisection",
-            target_metric="per_share_value",
-            market_price=123.0,
-            enterprise_value_market=1000.0,
-            base_case_value=100.0,
-            base_input_value=0.10,
-            solved_value=0.12,
-            absolute_offset=0.02,
-            relative_offset_pct=20.0,
-            lower_bound=-0.2,
-            upper_bound=0.5,
-            iterations=12,
-            residual=0.0,
-            interpretation="The market is pricing a stronger explicit-growth phase than the base case.",
-        ),
     )
 
     payload = result.to_dict()
 
-    assert "market_implied_stage1_growth" in payload
-    assert payload["market_implied_stage1_growth"]["enabled"] is True
-    assert payload["market_implied_stage1_growth"]["solver"] == "bisection"
+    assert "market_implied_growth" not in payload

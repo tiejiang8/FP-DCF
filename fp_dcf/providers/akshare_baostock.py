@@ -359,27 +359,92 @@ def _latest_close(symbol: str) -> float | None:
     return _coerce_float(closes.iloc[-1]) if not closes.empty else None
 
 
-def _lookup_stock_info_value(frame, item_name: str) -> float | None:
+_STOCK_INFO_SHARES_OUT_FIELDS = (
+    "总股本",
+    "总股本(股)",
+    "总股本（股）",
+    "总股本(万股)",
+    "总股本（万股）",
+    "总股本(亿股)",
+    "总股本（亿股）",
+)
+
+_BALANCE_SHEET_SHARE_CAPITAL_FIELDS = (
+    "实收资本(或股本)",
+    "实收资本（或股本）",
+    "股本",
+)
+
+
+def _resolve_shares_out_unit(raw_field: str | None) -> str:
+    field_name = str(raw_field or "")
+    if "万股" in field_name:
+        return "万股"
+    if "亿股" in field_name:
+        return "亿股"
+    return "股"
+
+
+def _normalize_shares_out_value(value, raw_unit: str | None) -> float | None:
+    shares_out = _coerce_float(value)
+    if shares_out is None:
+        return None
+
+    if raw_unit == "万股":
+        return shares_out * 10_000.0
+    if raw_unit == "亿股":
+        return shares_out * 100_000_000.0
+    return shares_out
+
+
+def _lookup_stock_info_shares_out(frame):
     _require_deps()
     if frame.empty or "item" not in frame.columns or "value" not in frame.columns:
-        return None
-    matched = frame.loc[frame["item"].astype(str) == item_name, "value"]
-    if matched.empty:
-        return None
-    return _coerce_float(matched.iloc[0])
+        return None, None, None
+
+    normalized_items = frame["item"].astype(str).str.strip()
+    for item_name in _STOCK_INFO_SHARES_OUT_FIELDS:
+        matched = frame.loc[normalized_items == item_name, "value"]
+        if matched.empty:
+            continue
+        raw_unit = _resolve_shares_out_unit(item_name)
+        shares_out = _normalize_shares_out_value(matched.iloc[0], raw_unit)
+        if shares_out is not None:
+            return shares_out, item_name, raw_unit
+
+    return None, None, None
 
 
 def _lookup_latest_share_capital(balance_sheet, frequency: str):
     _require_deps()
-    return _latest_valid(
-        _point_in_time(
-            _merge_series(
-                _syn(balance_sheet, ["实收资本(或股本)"]),
-                _syn(balance_sheet, ["股本"]),
-            ),
-            frequency,
+    for field_name in _BALANCE_SHEET_SHARE_CAPITAL_FIELDS:
+        share_capital = _latest_valid(
+            _point_in_time(
+                _syn(balance_sheet, [field_name]),
+                frequency,
+            )
         )
-    )
+        if share_capital is not None:
+            return share_capital, field_name, "股"
+    return None, None, None
+
+
+def _resolve_shares_out_with_source(
+    stock_info,
+    balance_sheet,
+    frequency: str,
+) -> tuple[float | None, str | None, str | None, str | None]:
+    _require_deps()
+
+    shares_out, raw_field, raw_unit = _lookup_stock_info_shares_out(_frame_to_df(stock_info))
+    if shares_out is not None:
+        return shares_out, "akshare:stock_individual_info_em", raw_field, raw_unit
+
+    shares_out, raw_field, raw_unit = _lookup_latest_share_capital(balance_sheet, frequency)
+    if shares_out is not None:
+        return shares_out, "akshare:balance_sheet_share_capital", raw_field, raw_unit
+
+    return None, None, None, None
 
 
 def _extract_latest_snapshot(
@@ -394,6 +459,7 @@ def _extract_latest_snapshot(
 ) -> dict:
     _require_deps()
     freq = str(statement_frequency or "A").upper()
+    diagnostics: list[str] = []
 
     inc = _prepare_statement_frame(income_statement)
     bal = _prepare_statement_frame(balance_sheet)
@@ -506,9 +572,12 @@ def _extract_latest_snapshot(
     op_nwc_delta = op_nwc.diff(delta_periods)
     nwc_delta = nwc.diff(delta_periods)
 
-    shares_out = _lookup_stock_info_value(_frame_to_df(stock_info), "总股本")
+    shares_out, shares_out_source, shares_out_raw_field, shares_out_raw_unit = (
+        _resolve_shares_out_with_source(stock_info, bal_filtered, freq)
+    )
     if shares_out is None:
-        shares_out = _lookup_latest_share_capital(bal_filtered, freq)
+        diagnostics.append("shares_out_unresolved_akshare_baostock")
+        diagnostics.append("capital_structure_source_unavailable_due_to_missing_shares_out")
     last_price = _latest_close(baostock_symbol)
 
     latest_total_debt = _latest_valid(total_debt)
@@ -586,6 +655,9 @@ def _extract_latest_snapshot(
             "total_debt": latest_total_debt,
             "net_debt": net_debt,
             "shares_out": shares_out,
+            "shares_out_source": shares_out_source,
+            "shares_out_raw_field": shares_out_raw_field,
+            "shares_out_raw_unit": shares_out_raw_unit,
             "historical_series": historical_series,
             "last_report_period": latest_period.date().isoformat() if latest_period is not None else None,
         },
@@ -609,6 +681,7 @@ def _extract_latest_snapshot(
             "capital_structure_source": capital_structure_source if equity_weight is not None else None,
         },
         "currency": "CNY",
+        "diagnostics": diagnostics,
     }
 
 
@@ -667,6 +740,7 @@ def fetch_akshare_baostock_snapshot(
         "currency": normalized.get("currency"),
         "fundamentals": deepcopy(normalized.get("fundamentals", {})),
         "assumptions": assumptions,
+        "diagnostics": list(normalized.get("diagnostics", [])),
     }
 
 
@@ -704,6 +778,9 @@ def enrich_payload_from_akshare_baostock(payload: dict, *, snapshot: dict | None
         prefill_warnings.append("akshare_baostock_cost_of_debt_unavailable_engine_default_may_apply")
     if assumptions.get("capital_structure_source") == "akshare_baostock:market_value_using_net_debt_fallback":
         prefill_warnings.append("akshare_baostock_total_debt_unavailable_used_net_debt_for_capital_structure")
+    for diagnostic in provider_snapshot.get("diagnostics", []):
+        if diagnostic not in prefill_diagnostics:
+            prefill_diagnostics.append(diagnostic)
 
     prefill_diagnostics.append(f"provider_normalization:akshare_baostock:{statement_frequency}")
     out["_prefill_warnings"] = prefill_warnings

@@ -53,8 +53,8 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 ## 你会得到什么
 
 * 支持 `steady_state_single_stage`、`two_stage`、`three_stage` 的结构化估值 JSON
-* `one_stage` / `two_stage` implied growth；现有 `implied_growth` block 仍不支持 `three_stage`
-* 支持 `two_stage` / `three_stage` 的独立 `market_implied_stage1_growth` 反推块
+* 统一的市场隐含增长能力 `market_implied_growth`
+* `steady_state_single_stage` 反推市场隐含长期增长率；`two_stage` 和 `three_stage` 反推市场隐含 stage-1 增长率
 * `WACC x Terminal Growth` 敏感性热力图
 * provider-backed normalization，包含带本地缓存的 Yahoo 路径，以及面向 CN 的 AkShare + BaoStock fallback
 * 适合下游工具消费的 machine-readable diagnostics
@@ -85,10 +85,12 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --pretty
 * [sample_output.json](./examples/sample_output.json)
 * [sample_input_three_stage.json](./examples/sample_input_three_stage.json)
 * [sample_output_three_stage.json](./examples/sample_output_three_stage.json)
-* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
-* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
-* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
-* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [sample_input_market_implied_growth_single_stage.json](./examples/sample_input_market_implied_growth_single_stage.json)
+* [sample_output_market_implied_growth_single_stage.json](./examples/sample_output_market_implied_growth_single_stage.json)
+* [sample_input_market_implied_growth_two_stage.json](./examples/sample_input_market_implied_growth_two_stage.json)
+* [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
+* [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
+* [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
 * [cn_tencent_two_stage.json](./examples/cn_tencent_two_stage.json)
 * [cn_tencent_two_stage.output.json](./examples/cn_tencent_two_stage.output.json)
 * [cn_moutai_single_stage.json](./examples/cn_moutai_single_stage.json)
@@ -239,7 +241,7 @@ FP-DCF `v0.4.0` 在主估值链中支持以下 `valuation_model`：
 
 其中 `three_stage` 是真正的三阶段估值：高增长期、收敛期、终值期。对未知 `valuation_model`，FP-DCF 现在会直接报错，并在错误信息中包含 `unsupported valuation_model`；不再静默回退到 `steady_state_single_stage`。
 
-`v0.4.0` 的 `three_stage` 现在既支持主估值，也支持独立的 `market_implied_stage1_growth` 反推；现有 `implied_growth` 求解器仍只支持 `one_stage` 与 `two_stage`。
+`market_implied_growth` 是唯一正式的市场隐含增长入口。它的含义由 `valuation_model` 决定：`steady_state_single_stage` 反推市场隐含长期增长率，`two_stage` 和 `three_stage` 反推市场隐含 stage-1 增长率。
 
 三阶段输入示例：
 
@@ -362,86 +364,60 @@ python3 scripts/run_dcf.py --input examples/sample_input.json --no-sensitivity -
 
 当 terminal growth 大于等于 WACC 时，对应单元格会留空，并在 diagnostics 中说明。
 
-## 隐含增长率反推
+## 市场隐含增长
 
-主 CLI 可以在不改变 `run_valuation()` 主逻辑的前提下，追加结构化 implied-growth 输出。
+主 CLI 可以在不改变 `run_valuation()` 主逻辑的前提下，追加结构化 `market_implied_growth` 输出。
 
 输入约定：
 
 * 直接提供 `payload.market_inputs.enterprise_value_market`，或
 * 提供 `payload.market_inputs.market_price`，再结合 `shares_out` 与 `net_debt` 推导 EV
-* `payload.implied_growth.model` 支持 `one_stage` 与 `two_stage`
+* `payload.market_implied_growth.enabled = true`
+* 可选项包括 `lower_bound`、`upper_bound`、`solver`、`tolerance`、`max_iterations`
 
-`v0.4.0` 中，现有隐含增长求解器仍不支持 `three_stage`。
+按 `valuation_model` 的解释方式：
 
-单阶段示例：
+* `steady_state_single_stage` 反推 `growth_rate`，即市场隐含长期增长率
+* `two_stage` 和 `three_stage` 反推 `stage1_growth_rate`，即市场隐含 stage-1 增长率
+
+输出块也叫 `market_implied_growth`，并且始终包含：
+
+* `enabled`
+* `success`
+* `valuation_model`
+* `solved_field`
+* `solved_value`
+* `solver_used`
+* `lower_bound`
+* `upper_bound`
+* `iterations`
+* `residual`
+
+还可能包含：
+
+* `market_price`
+* `market_enterprise_value`
+* `base_case_per_share_value`
+* `base_case_enterprise_value`
+* `message`
+
+旧的市场隐含增长键会直接报错，不再兼容。
+
+单阶段最小示例：
 
 ```json
 {
+  "valuation_model": "steady_state_single_stage",
   "market_inputs": {
     "market_price": 225.0
   },
-  "implied_growth": {
-    "model": "one_stage"
+  "market_implied_growth": {
+    "enabled": true
   }
 }
 ```
 
-两阶段示例：
-
-```json
-{
-  "market_inputs": {
-    "enterprise_value_market": 3500000000000.0
-  },
-  "implied_growth": {
-    "model": "two_stage",
-    "high_growth_years": 5,
-    "stable_growth_rate": 0.03,
-    "lower_bound": 0.0,
-    "upper_bound": 0.25
-  }
-}
-```
-
-输出会追加：
-
-* `market_inputs`：解析后的 market EV / equity value / price / shares / net debt 及其来源
-* `implied_growth`：结构化求解结果
-
-其中：
-
-* `one_stage` 使用 closed-form 直接反推 implied growth
-* `two_stage` 在固定 stable growth 的前提下，使用二分法反推 implied high-growth rate
-* 如果启用了 implied growth，但 market inputs 不完整，CLI 会跳过 implied-growth 输出，而不会让主估值失败
-
-single-stage 的市场隐含增长仍应走 `payload.implied_growth.model=one_stage`，不要把 `steady_state_single_stage` 强行塞进 `market_implied_stage1_growth`。
-
-## 市场隐含 stage1 增长率
-
-`market_implied_stage1_growth` 是一个独立于 `implied_growth` 的输出块。
-
-它只回答一个问题：
-
-* 在 base-case 的 `FCFF` anchor、`WACC`、terminal growth、阶段年数、capital structure、`shares_out`、`net_debt` 都不变时
-* 市场价格或市场 EV 等价于多高的 `stage1_growth_rate`
-
-这是单变量解释层，不会自动改写 payload assumptions，也不是多参数联动校准。
-
-支持范围：
-
-* `valuation_model=two_stage`
-* `valuation_model=three_stage`
-
-不支持：
-
-* `valuation_model=steady_state_single_stage`
-
-如果在 `steady_state_single_stage` 上启用它，FP-DCF 会直接报错：
-
-* `market_implied_stage1_growth requires valuation_model in {two_stage, three_stage}`
-
-两阶段最小输入：
+两阶段最小示例：
 
 ```json
 {
@@ -449,7 +425,7 @@ single-stage 的市场隐含增长仍应走 `payload.implied_growth.model=one_st
   "market_inputs": {
     "market_price": 582.5849079694428
   },
-  "market_implied_stage1_growth": {
+  "market_implied_growth": {
     "enabled": true,
     "lower_bound": 0.0,
     "upper_bound": 0.4
@@ -467,65 +443,38 @@ single-stage 的市场隐含增长仍应走 `payload.implied_growth.model=one_st
 }
 ```
 
-三阶段最小输入：
-
-```json
-{
-  "valuation_model": "three_stage",
-  "market_inputs": {
-    "market_price": 491.243930259804
-  },
-  "market_implied_stage1_growth": {
-    "enabled": true
-  },
-  "assumptions": {
-    "terminal_growth_rate": 0.03,
-    "stage1_growth_rate": 0.12,
-    "stage1_years": 3,
-    "stage2_end_growth_rate": 0.06,
-    "stage2_years": 2,
-    "stage2_decay_mode": "linear"
-  },
-  "fundamentals": {
-    "fcff_anchor": 100.0,
-    "shares_out": 10.0,
-    "net_debt": 0.0
-  }
-}
-```
-
 输出片段：
 
 ```json
 {
-  "market_implied_stage1_growth": {
+  "market_implied_growth": {
     "enabled": true,
     "success": true,
     "valuation_model": "two_stage",
-    "solver": "bisection",
-    "target_metric": "per_share_value",
-    "market_price": 582.5849079694428,
-    "enterprise_value_market": 5845.849079694428,
-    "base_case_value": 506.5955721473416,
-    "base_input_value": 0.1,
+    "solved_field": "stage1_growth_rate",
     "solved_value": 0.14021034240722655,
-    "absolute_offset": 0.04021034240722654,
-    "relative_offset_pct": 40.21034240722654,
+    "solver_used": "bisection",
     "lower_bound": 0.0,
     "upper_bound": 0.4,
     "iterations": 20,
     "residual": 0.00035705652669548726,
-    "interpretation": "The market is pricing a stronger explicit-growth phase than the base case."
+    "market_price": 582.5849079694428,
+    "market_enterprise_value": 5845.849079694428,
+    "base_case_per_share_value": 506.5955721473416,
+    "base_case_enterprise_value": 5085.955721473416,
+    "message": "Market-implied growth solved successfully."
   }
 }
 ```
 
 示例：
 
-* [sample_input_market_implied_stage1_growth_two_stage.json](./examples/sample_input_market_implied_stage1_growth_two_stage.json)
-* [sample_output_market_implied_stage1_growth_two_stage.json](./examples/sample_output_market_implied_stage1_growth_two_stage.json)
-* [sample_input_market_implied_stage1_growth_three_stage.json](./examples/sample_input_market_implied_stage1_growth_three_stage.json)
-* [sample_output_market_implied_stage1_growth_three_stage.json](./examples/sample_output_market_implied_stage1_growth_three_stage.json)
+* [sample_input_market_implied_growth_single_stage.json](./examples/sample_input_market_implied_growth_single_stage.json)
+* [sample_output_market_implied_growth_single_stage.json](./examples/sample_output_market_implied_growth_single_stage.json)
+* [sample_input_market_implied_growth_two_stage.json](./examples/sample_input_market_implied_growth_two_stage.json)
+* [sample_output_market_implied_growth_two_stage.json](./examples/sample_output_market_implied_growth_two_stage.json)
+* [sample_input_market_implied_growth_three_stage.json](./examples/sample_input_market_implied_growth_three_stage.json)
+* [sample_output_market_implied_growth_three_stage.json](./examples/sample_output_market_implied_growth_three_stage.json)
 
 ## Provider 缓存
 
@@ -626,18 +575,22 @@ provider-backed run 还会在 diagnostics 中输出缓存状态，例如：
     "shares_out": 15500000000.0,
     "net_debt": 46000000000.0
   },
-  "implied_growth": {
+  "market_implied_growth": {
     "enabled": true,
-    "model": "one_stage",
-    "solver": "closed_form",
     "success": true,
-    "enterprise_value_market": 3533500000000.0,
-    "fcff_anchor": 106216000000.0,
-    "wacc": 0.0912624,
-    "one_stage": {
-      "growth_rate": 0.05941663866081859
-    },
-    "two_stage": null
+    "valuation_model": "steady_state_single_stage",
+    "solved_field": "growth_rate",
+    "solved_value": 0.05941663866081859,
+    "solver_used": "closed_form",
+    "lower_bound": -0.5,
+    "upper_bound": 0.5,
+    "iterations": 0,
+    "residual": 0.0,
+    "market_price": 225.0,
+    "market_enterprise_value": 3533500000000.0,
+    "base_case_per_share_value": 112.24525194214796,
+    "base_case_enterprise_value": 1785801405103.2935,
+    "message": "Market-implied growth solved successfully."
   },
   "diagnostics": [
     "tax_rate_paths_are_separated",
